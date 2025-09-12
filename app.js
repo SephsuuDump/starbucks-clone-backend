@@ -1,5 +1,5 @@
 import { app } from './config.js';
-import authRoutes from './auth-module/app.js';
+import authRoutes from './auth-module/auth.js';
 import supplierRoute from './procurement-module/supplier.js';
 import purchaseOrderRoute from './procurement-module/purchase-order.js';
 import purchaseRequestRouter from './procurement-module/purchase-request.js';
