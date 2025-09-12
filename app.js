@@ -1,5 +1,6 @@
 import { app } from './config.js';
 import authRoute from './auth-module/auth.js';
+import branchRoute from './inventory-module/Branch.js'
 import userRoute from './user-module/user.js';
 import inventoryItem from './inventory-module/InventoryItem.js'
 import supplierRoute from './procurement-module/supplier.js';
@@ -17,6 +18,8 @@ app.use('/api/purchase-requests', purchaseRequestRoute);
 app.use('/api/suppliers', supplierRoute);
 app.use('/api/supply-items', supplyItemRoute)
 app.use('/api/users', userRoute);
+app.use('/api/branch', branchRoute)
+
 
 
 const PORT = process.env.PORT || 6000

@@ -2,8 +2,8 @@ import express, { response } from "express";
 import { supabase } from "../config.js";
 
 const router = express.Router();
-const table = 'inventory_item';
-
+const table = 'branch';
+const responseFields = 'id, name, location'
 
 
 router.post("/create", async (req, res) => {
@@ -11,7 +11,7 @@ router.post("/create", async (req, res) => {
     const {data, error} = await supabase
     .from(table)
     .insert(body)
-    .select('*')
+    .select(responseFields)
     .single();
 
     if (error) return res.status(500).json({message: error.message})
@@ -20,25 +20,27 @@ router.post("/create", async (req, res) => {
 })
 
 router.post("/update", async (req, res) => {
-    const { skuid } = req.query
+    const { id } = req.query
     const updateRequest = req.body;
+
+    if(!id) {return res.status(400).json("Branch id is required")}
 
     const {data : existing, error : existingErr } = await supabase
     .from(table)
     .select('*')
-    .eq('skuid', skuid)
+    .eq('id', id)
     .eq('is_deleted', false)
     .maybeSingle()
 
     if(existingErr) { return res.status(404).json({message: existingErr.message})}
 
-    if(!existing) { return res.status(404).json({message: "Skuid not found."})}
+    if(!existing) { return res.status(404).json({message: "Branch id not found."})}
  
     const { data, error } = await supabase
         .from(table)
         .update(updateRequest)
-        .eq('skuid', skuid)
-        .select('*')
+        .eq('id', id)
+        .select(responseFields)
         .single();
 
     if (error) return res.status(500).json({ message: error.message });
@@ -46,13 +48,15 @@ router.post("/update", async (req, res) => {
     return res.status(200).json(data);
 })
 
-router.get("/find-by-skuid", async (req, res) => {
-    const {skuid}  = req.query
+router.get("/get-by-id", async (req, res) => {
+    const {id}  = req.query
+
+      if(id === null ) {return res.status(404).json("Branch id is required.")}
 
     const {data, error} = await supabase 
     .from(table)
-    .select('name, category, cost, unit_measurement')
-    .eq('skuid', skuid)
+    .select(responseFields)
+    .eq('id', id)
     .eq('is_deleted', false)
     .maybeSingle()
 
@@ -64,35 +68,10 @@ router.get("/find-by-skuid", async (req, res) => {
     return res.status(200).json(data)
 })
 
-router.get("/find-by-category", async (req, res) => {
-    const {category} = req.query;
-
-
-    const {data: existing, error : existingErr} = await supabase
-    .from(table)
-    .select('*')
-    .eq('category', category)
-    .limit(1)
-
-    if(existingErr) {return res.status(500).json({message : existingErr.message})}
-
-    if(!existing || existing.length === 0 ) {return res.status(404).json("No Category found for Inventory Item")}
-
+router.get("/get-all", async (req ,res) => {
     const {data, error} = await supabase
     .from(table)
-    .select('name, category, cost, unit_measurement')
-    .eq('category', category)
-    .eq('is_deleted', false)
-
-    if(error) {return res.status(500).json({message : existing.message})}
-
-    return res.status(200).json(data)
-})
-
-router.get("/get-all", async (req, res) => {
-    const {data, error} = await supabase
-    .from(table)
-    .select('*')
+    .select(responseFields)
     .eq('is_deleted', false)
 
     if(error) {return res.status(500).json({message: error.message})}
@@ -100,33 +79,60 @@ router.get("/get-all", async (req, res) => {
     return res.status(200).json(data)
 })
 
+router.get("/get-by-location", async (req, res) => {
+    const {location} = req.query
+
+    if(location === null ) {return res.status(404).json("Branch location is required.")}
+
+    const {data, error} = await supabase
+    .from(table)
+    .select(responseFields)
+    .eq('is_deleted', false)
+    .ilike('location', `${location}%`)
+
+    if (error) {return res.status(500).json({message: error.message})}
+
+    if (data.length === 0 || data == null) {
+        return res.status(404).json({message : "No branch with location  " + location + " found."})
+    }
+
+    return res.status(200).json(data)
+
+
+})
 
 router.post("/delete", async (req, res) => {
-    const {skuid} = req.query
+    const {id} = req.query
+
+    if(id === null ) {return res.status(400).json("Branch id is required")}
 
     const {data : existing, error : existingErr} = await supabase
     .from(table)
     .select('*')
-    .eq('skuid', skuid)
+    .eq('id', id)
     .eq('is_deleted', false)
     .maybeSingle()
 
     if(existingErr) {return res.status(500).json({message: existingErr.message})}
     
-    if(!existing) {return res.status(404).json({message : "No inventory item with skuid " + skuid + " found."})}
+    if(!existing) {return res.status(404).json({message : "No branch with id" + id + " found."})}
 
     const {data , error} = await supabase
     .from(table)
     .update({'is_deleted': true})
-    .eq('skuid', skuid)
+    .eq('id', id)
+    .select(responseFields)
     
 
     if(error) {return res.status(500).json({message : error.message})}
 
-    return res.status(200).send("Deleted Inventory item with SKUID " + skuid)
+    return res.status(200).send("Deleted branch  " + data[0].name)
     
 })
 
-export default router;
+
+export default router
+
+
 
 
