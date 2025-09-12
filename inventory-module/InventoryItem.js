@@ -23,6 +23,8 @@ router.post("/update", async (req, res) => {
     const { skuid } = req.query
     const updateRequest = req.body;
 
+    if(skuid === null) {return res.status(400).json("SKUID is required")}
+
     const {data : existing, error : existingErr } = await supabase
     .from(table)
     .select('*')
@@ -49,6 +51,8 @@ router.post("/update", async (req, res) => {
 router.get("/find-by-skuid", async (req, res) => {
     const {skuid}  = req.query
 
+     if(skuid === null) {return res.status(400).json("SKUID is required")}
+
     const {data, error} = await supabase 
     .from(table)
     .select('name, category, cost, unit_measurement')
@@ -67,6 +71,7 @@ router.get("/find-by-skuid", async (req, res) => {
 router.get("/find-by-category", async (req, res) => {
     const {category} = req.query;
 
+    if(category === null) {return res.status(400).json("Inventory Item category is required")}
 
     const {data: existing, error : existingErr} = await supabase
     .from(table)
@@ -99,7 +104,6 @@ router.get("/get-all", async (req, res) => {
 
     return res.status(200).json(data)
 })
-
 
 router.post("/delete", async (req, res) => {
     const {skuid} = req.query
