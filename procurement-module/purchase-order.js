@@ -23,7 +23,21 @@ router.get('/', async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.status(200).json(data);
+    const formattedData = data.map((item) => ({
+        id: item.id,
+        date: item.date,
+        status: item.status,
+        total_cost: item.total_cost,
+        supplier: item.supplier,
+        supplies: item.purchase_order_item.map((subitem) => ({
+            name: subitem.supplier_item.name,
+            quantity: subitem.quantity,
+            description: subitem.description,
+            unit_cost: subitem.unit_cost
+        }))
+    }))
+
+    return res.status(200).json(formattedData);
 });
 
 router.get('/:id', async (req, res) => {

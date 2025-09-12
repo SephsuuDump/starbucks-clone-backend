@@ -8,7 +8,7 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const { data, error } = await supabase
     .from(table)
-    .select('')
+    .select('*')
     .eq('supplier_id', id)
 
     if (!data) return res.status(400).json({ message: `Supplier with id: ${id} does not exists.` });
@@ -16,6 +16,6 @@ router.get('/:id', async (req, res) => {
 
     return res.status(200).json(data);
 
-})
+});
 
 export default router;

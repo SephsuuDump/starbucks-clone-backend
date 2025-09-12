@@ -23,7 +23,7 @@ router.post("/oauth-login", async (req, res) => {
 
     try {
         const { data: existing } = await supabase
-        .from("_users")
+        .from(table)
         .select("*")
         .eq("email", email)
         .single()
@@ -44,7 +44,7 @@ router.post("/oauth-login", async (req, res) => {
         const hashedPassword = await bcrypt.hash(randomPassword, 10)
 
         const { data: newUser, error } = await supabase
-        .from("_users")
+        .from(table)
         .insert({
             email,
             password: hashedPassword,
@@ -70,7 +70,8 @@ router.post("/login", async (req, res) => {
     .eq('email', email)
     .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(400).json({ message: "Invalid username" });
+    if (error) return res.status(500).json({ message: error.message });
 
     const matchPassword = await bcrypt.compare(password, data.password);
 
@@ -81,7 +82,8 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
         { 
             id: data.id, 
-            email: data.email 
+            email: data.email,
+            role: data.role
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
