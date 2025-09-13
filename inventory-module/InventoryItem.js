@@ -55,7 +55,7 @@ router.get("/find-by-skuid", async (req, res) => {
 
     const {data, error} = await supabase 
     .from(table)
-    .select('name, category, cost, unit_measurement')
+    .select('name, category, cost, unit_measurement, description')
     .eq('skuid', skuid)
     .eq('is_deleted', false)
     .maybeSingle()
@@ -85,7 +85,7 @@ router.get("/find-by-category", async (req, res) => {
 
     const {data, error} = await supabase
     .from(table)
-    .select('name, category, cost, unit_measurement')
+    .select('name, category, cost, unit_measurement, description')
     .eq('category', category)
     .eq('is_deleted', false)
 
