@@ -13,6 +13,34 @@ export async function getAllInventoryItems() {
     .eq("is_deleted", false);
 }
 
+export async function validateAndCalculateItems(items) {
+  let validatedItems = [];
+  let totalCost = 0;
+
+  for (const item of items) {
+    const { data: invItem, error } = await supabase
+      .from("inventory_item")
+      .select("skuid, cost, name")
+      .eq("skuid", item.inventory_item_id)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (!invItem) {return res.status(404).json({message : "Inventory " + invItem.name + "is not found"})};
+
+    const itemCost = (invItem.cost || 0) * item.qty;
+    totalCost += itemCost;
+
+    validatedItems.push({
+      inventory_item_id: invItem.skuid,
+      quantity: item.qty,
+      cost: itemCost
+    });
+  }
+
+  return { validatedItems, totalCost };
+}
+
 
 
 router.post("/create", async (req, res) => {
