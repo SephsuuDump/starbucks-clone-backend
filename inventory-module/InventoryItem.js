@@ -6,6 +6,15 @@ const table = 'inventory_item';
 
 
 
+export async function getAllInventoryItems() {
+  return await supabase
+    .from("inventory_item")
+    .select('*')
+    .eq("is_deleted", false);
+}
+
+
+
 router.post("/create", async (req, res) => {
     const body = req.body;
     const {data, error} = await supabase
