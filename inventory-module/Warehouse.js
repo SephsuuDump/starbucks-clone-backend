@@ -5,7 +5,7 @@ import { createInventoryRecord } from "./Inventory.js";
 
 const router = express.Router();
 const table = 'warehouse';
-const responseFields = 'id, name, location, branch:branch_id (name, location), status'
+const responseFields = 'id, name, location, status'
 
 router.post("/create", async (req, res) => {
     const warehouseInfo = req.body;
@@ -34,6 +34,7 @@ router.post("/create", async (req, res) => {
         const newInventory = {
             inventory_item_id: item.skuid,
             warehouse_id: data.id,
+            branch_id : null,
             qty: 0, 
         }
 
@@ -153,7 +154,7 @@ router.get("/get-all", async (req ,res) => {
 router.get("/get-by-location", async (req, res) => {
     const {location} = req.query
 
-    if(location === null ) {return res.status(404).json("Branch location is required.")}
+    if(location === null ) {return res.status(404).json("Warehouse location is required.")}
 
     const {data, error} = await supabase
     .from(table)
@@ -164,7 +165,7 @@ router.get("/get-by-location", async (req, res) => {
     if (error) {return res.status(500).json({message: error.message})}
 
     if (data.length === 0 || data == null) {
-        return res.status(404).json({message : "No branch with location  " + location + " found."})
+        return res.status(404).json({message : "No warehouse with location  " + location + " found."})
     }
 
     return res.status(200).json(data)

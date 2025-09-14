@@ -1,5 +1,7 @@
 import express, { response } from "express";
 import { supabase } from "../config.js";
+import { getAllInventoryItems } from "./InventoryItem.js";
+import { createInventoryRecord } from "./Inventory.js";
 
 const router = express.Router();
 const table = 'branch';
@@ -15,6 +17,28 @@ router.post("/create", async (req, res) => {
     .single();
 
     if (error) return res.status(500).json({message: error.message})
+
+    const { data: items, error: itemsErr } = await getAllInventoryItems();
+
+    if (itemsErr) return res.status(500).json({ message: itemsErr.message });
+
+    let inventoryBody = []
+
+    for (const item of items) {
+        const newInventory = {
+            inventory_item_id: item.skuid,
+            warehouse_id: null,
+            branch_id : data.id,
+            qty: 0, 
+        }
+
+        inventoryBody.push(newInventory)
+    }
+
+    const { error: invErr } = await createInventoryRecord(inventoryBody);
+    if (invErr) {
+        console.error(`Failed to create Inventory`, invErr.message);
+    }
 
     return res.status(201).json(data)
 })

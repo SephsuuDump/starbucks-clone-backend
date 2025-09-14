@@ -3,7 +3,8 @@ import { supabase } from "../config.js";
 
 const router = express.Router();
 const table = "inventory";
-const responseFields = 'id, qty, inventory_item:inventory_item_id(name, category, unit_measurement, cost, description) , warehouse: warehouse_id (name, location)'
+const responseFields = 'id, qty, inventory_item:inventory_item_id(name, category, unit_measurement, cost, description) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
+
 
 export async function createInventoryRecord(body) {
   return await supabase
@@ -89,8 +90,27 @@ router.get("/get-by-warehouse", async (req, res) => {
 
   const { data, error } = await supabase
     .from(table)
-    .select("*, inventory_item(name, unit_measurement, description, cost)")
+    .select(responseFields)
     .eq("warehouse_id", warehouse_id);
+
+  if (error) return res.status(500).json({ message: error.message });
+
+  if (!data || data.length === 0)
+    return res.status(404).json({ message: "No inventory found for this warehouse" });
+
+  return res.status(200).json(data);
+});
+
+
+router.get("/get-by-branch", async (req, res) => {
+  const { branch_id } = req.query;
+
+  if (!branch_id) return res.status(400).json("branch id is required");
+
+  const { data, error } = await supabase
+    .from(table)
+    .select(responseFields)
+    .eq("branch_id", branch_id);
 
   if (error) return res.status(500).json({ message: error.message });
 
