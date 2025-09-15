@@ -1,9 +1,11 @@
 import express from "express";
 import { supabase } from "../config.js";
+import { getTransferById } from "./TransferRequest.js";
 
 const router = express.Router();
 const table = "inventory";
-const responseFields = 'id, qty, inventory_item:inventory_item_id(name, category, unit_measurement, cost, description) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
+const transactionTable = "inventory_transaction"
+const responseFields = 'id, qty, inventory_item:inventory_item_id(name, unit_measurement) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
 
 
 export async function createInventoryRecord(body) {
@@ -145,5 +147,177 @@ router.post("/delete", async (req, res) => {
 
   return res.status(200).send("Deleted inventory record with id " + id);
 });
+
+
+router.post("/process-input", async (req, res) => {
+  const { id, quantity } = req.query;
+
+  if (!id || !quantity) {
+    return res.status(400).json({ message: "Inventory Id and changed quantity is required" }); 
+  }
+
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from(table)
+      .select("id, qty")  
+      .eq("id", id)
+      .single();
+
+    if (fetchError) {
+      return res.status(500).json({ message: fetchError.message });
+    }
+
+    const changedQuantity = Number(quantity); 
+    const newQuantity = existing.qty + changedQuantity;
+
+    const { data: updated, error: updateError } = await supabase
+      .from(table)
+      .update({ qty: newQuantity })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ message: updateError.message });
+    }
+
+    const transactionBody = {
+      changed_quantity: changedQuantity,
+      source: "INPUT",
+      type: "IN", 
+      inventory_id: updated.id,
+      transfer_request_id: null,
+    };
+
+    const { error: transactionError } = await supabase
+      .from(transactionTable)
+      .insert(transactionBody);
+
+    if (transactionError) {
+      return res.status(500).json({ message: transactionError.message });
+    }
+
+    return res.status(201).json(updated);
+
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/process-transfer", async (req, res) => {
+  const { id } = req.query;
+
+  if (!id) {
+    return res.status(400).json({ message: "Transfer Request Id is required" });
+  }
+
+  try {
+    const transfer = await getTransferById(id);
+
+    if (!transfer) {
+      return res.status(404).json({ message: "Transfer not found" });
+    }
+
+    for (const item of transfer.transfer_item) {
+      const { inventory_item_id, quantity } = item;
+
+      console.log(inventory_item_id)
+      console.log(transfer.from_warehouse)
+      if (transfer.status === "APPROVED") {
+        const { data: sourceInventory, error: sourceError } = await supabase
+          .from("inventory")
+          .select("id, qty")
+          .eq("inventory_item_id", inventory_item_id)
+          .eq("warehouse_id", transfer.from_warehouse)
+          .maybeSingle();
+
+        if (sourceError) {
+          return res.status(500).json({ message: sourceError.message });
+        }
+        if (!sourceInventory) {
+          return res.status(404).json({ message: "Source inventory not found" });
+        }
+
+        const newQty = sourceInventory.qty - Number(quantity);
+
+        await supabase
+          .from("inventory")
+          .update({ qty: newQty })
+          .eq("id", sourceInventory.id);
+
+        await supabase.from("inventory_transaction").insert({
+          changed_quantity: -Number(quantity),
+          source: "TRANSFER",
+          type: "OUT",
+          inventory_id: sourceInventory.id,
+          transfer_request_id: transfer.id,
+          created_at: new Date()
+        });
+      }
+
+      if (transfer.status === "DELIVERED") {
+        const destinationFilter = transfer.to_warehouse
+          ? { warehouse_id: transfer.to_warehouse }
+          : { branch_id: transfer.to_branch };
+
+        let { data: destInventory, error: destError } = await supabase
+          .from("inventory")
+          .select("id, qty")
+          .eq("inventory_item_id", inventory_item_id)
+          .match(destinationFilter)
+          .maybeSingle();
+
+        if (destError) {
+          return res.status(500).json({ message: destError.message });
+        }
+
+        if (!destInventory) {
+          const { data: newInv, error: createError } = await supabase
+            .from("inventory")
+            .insert({
+              inventory_item_id,
+              qty: Number(quantity),
+              ...destinationFilter
+            })
+            .select("id, qty")
+            .single();
+
+          if (createError) {
+            return res.status(500).json({ message: createError.message });
+          }
+          destInventory = newInv;
+        } else {
+          const newQty = destInventory.qty + Number(quantity);
+          const { data: updatedInv, error: updateError } = await supabase
+            .from("inventory")
+            .update({ qty: newQty })
+            .eq("id", destInventory.id)
+            .select("id, qty")
+            .single();
+
+          if (updateError) {
+            return res.status(500).json({ message: updateError.message });
+          }
+          destInventory = updatedInv;
+        }
+
+        await supabase.from("inventory_transaction").insert({
+          changed_quantity: Number(quantity),
+          source: "TRANSFER",
+          type: "IN",
+          inventory_id: destInventory.id,
+          transfer_request_id: transfer.id,
+          created_at: new Date()
+        });
+      }
+    }
+
+    return res.status(200).json({ message: "Transfer processed successfully", id });
+
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
 
 export default router;

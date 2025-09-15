@@ -5,8 +5,31 @@ import { validateAndCalculateItems } from "./InventoryItem.js";
 const router = express.Router()
 const table = 'transfer_request'
 const itemTable = 'transfer_item'
-const responseFields = "id, from_warehouse, to_branch, to_warehouse, status, total_cost";
+const responseFields = `
+      id,
+      from_warehouse,
+      to_branch,
+      to_warehouse,
+      status,
+      total_cost,
+      transfer_item (
+        inventory_item_id,
+        quantity,
+        cost
+      )
+    `;
 
+export async function getTransferById(transferId) {
+  const {data} = await supabase
+  .from(table)
+  .select(responseFields)
+  .eq('id', transferId)
+  .maybeSingle()
+
+  return data;
+  
+  
+}
 
 router.post("/create", async (req, res) => {
   try {
@@ -74,19 +97,7 @@ router.get("/get-all", async (req, res) => {
   try {
     const query = supabase
       .from(table)
-      .select(`
-        id,
-        from_warehouse,
-        to_branch,
-        to_warehouse,
-        status,
-        total_cost,
-        transfer_item (
-          inventory_item_id,
-          quantity,
-          cost
-        )
-      `);
+      .select(responseFields);
 
     if (status) {
       query.eq("status", status.toUpperCase());
@@ -115,19 +126,7 @@ router.get("/get-by-id", async (req, res) => {
   try {
     const query = supabase
       .from(table)
-      .select(`
-        id,
-        from_warehouse,
-        to_branch,
-        to_warehouse,
-        status,
-        total_cost,
-        transfer_item (
-          inventory_item_id,
-          quantity,
-          cost
-        )
-      `)
+      .select(responseFields)
       .eq('id', id)
     
       const {data, error} = await query
@@ -148,19 +147,7 @@ router.get("/get-by-destination", async (req, res) => {
     try {
         const {data, error}  = await supabase
         .from(table)
-        .select(`
-        id,
-        from_warehouse,
-        to_branch,
-        to_warehouse,
-        status,
-        total_cost,
-        transfer_item (
-        inventory_item_id,
-        quantity,
-        cost
-        )
-        `)
+        .select(responseFields)
         .or(`to_warehouse.eq.${destination}, to_branch.eq.${destination}`)  
         .maybeSingle();
         
@@ -178,19 +165,7 @@ router.get("/get-by-source", async (req,res) => {
     try {
         const {data, error}  = await supabase
         .from(table)
-        .select(`
-        id,
-        from_warehouse,
-        to_branch,
-        to_warehouse,
-        status,
-        total_cost,
-        transfer_item (
-        inventory_item_id,
-        quantity,
-        cost
-        )
-        `)
+        .select(responseFields)
         .eq('from_warehouse', source)
         
         if(error) {return res.status(500).json({message : error.message})}
@@ -210,19 +185,7 @@ router.post("/update-status", async (req, res) => {
     const { data , error } = await supabase
       .from("transfer_request")
       .update({'status' : status.toUpperCase()})
-        .select(`
-        id,
-        from_warehouse,
-        to_branch,
-        to_warehouse,
-        status,
-        total_cost,
-        transfer_item (
-            inventory_item_id,
-            quantity,
-            cost
-        )
-        `)
+        .select(responseFields)
       .eq("id", id);
 
     if (error) {
