@@ -138,7 +138,7 @@ router.post("/delete-by-id" , async (req, res) => {
     }
 })
 
-router.get("get-all", async (req, res) => {
+router.get("/get-all", async (req, res) => {
     const {status, start, end} = req.query;
 
     try {
@@ -153,7 +153,7 @@ router.get("get-all", async (req, res) => {
 
             return res.status(200).json(data)
         }
-        else if(start_data && end_date) {
+        else if(start && end) {
             const {data, error} = await supabase
             .from(table)
             .select(responseFields)
