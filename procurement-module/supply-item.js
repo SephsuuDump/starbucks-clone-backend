@@ -2,7 +2,7 @@ import express from "express";
 import { supabase } from "../config.js";
 
 const router = express.Router();
-const table = 'supply_item';
+const table = 'supplier_item';
 
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
@@ -15,7 +15,19 @@ router.get('/:id', async (req, res) => {
     if (error) return res.status(500).json({ message: error.message });
 
     return res.status(200).json(data);
-
 });
+
+router.post('/', async (req, res) => {
+    const supply = req.body;
+    const { data, error } = await supabase
+    .from(table)
+    .insert(supply)
+    .select('*')
+    .single();
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    return res.status(201).json(data);
+})
 
 export default router;

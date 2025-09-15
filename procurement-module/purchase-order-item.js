@@ -14,4 +14,16 @@ router.get('/', async (req, res) => {
     return res.status(200).json(data);
 })
 
+router.post('/', async (req, res) => {
+    const poi = req.body;
+    const { data, error } = await supabase 
+    .from(table)
+    .insert(poi)
+    .select('*')
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    return res.status(201).json(data);
+})
+
 export default router;
