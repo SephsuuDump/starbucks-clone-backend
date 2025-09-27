@@ -132,15 +132,41 @@ router.get("/find-by-category", async (req, res) => {
 })
 
 router.get("/get-all", async (req, res) => {
-    const {data, error} = await supabase
-    .from(table)
-    .select('*')
-    .eq('is_deleted', false)
+  try {
+    const page = parseInt(req.query.page) || 1;  
+    const limit = parseInt(req.query.limit) || 10; 
+    const offset = (page - 1) * limit;
 
-    if(error) {return res.status(500).json({message: error.message})}
+    const { count, error: countError } = await supabase
+      .from(table)
+      .select('', { count: "exact", head: true }) 
+      .eq("is_deleted", false);
 
-    return res.status(200).json(data)
-})
+    if (countError) {
+      return res.status(500).json({ message: countError.message });
+    }
+
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq("is_deleted", false)
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return res.status(500).json({ message: error.message });
+    }
+
+    return res.status(200).json({
+      page,
+      limit,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      data,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
 
 router.post("/delete", async (req, res) => {
     const {skuid} = req.query
@@ -164,7 +190,7 @@ router.post("/delete", async (req, res) => {
 
     if(error) {return res.status(500).json({message : error.message})}
 
-    return res.status(200).send("Deleted Inventory item with SKUID " + skuid)
+    return res.status(200).json({message : "Deleted Inventory item with SKUID " + skuid})
     
 })
 
