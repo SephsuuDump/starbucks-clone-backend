@@ -133,40 +133,61 @@ router.get("/find-by-category", async (req, res) => {
 
 router.get("/get-all", async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;  
-    const limit = parseInt(req.query.limit) || 10; 
+    const page = parseInt(req.query.page ) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = (req.query.search ) || "";
+    const sort = (req.query.sort ) || "az";
     const offset = (page - 1) * limit;
 
-    const { count, error: countError } = await supabase
-      .from(table)
-      .select('', { count: "exact", head: true }) 
-      .eq("is_deleted", false);
 
-    if (countError) {
-      return res.status(500).json({ message: countError.message });
+    let baseQuery = supabase.from(table).select("*", { count: "exact", head: true }).eq("is_deleted", false);
+    let dataQuery = supabase.from(table).select("*").eq("is_deleted", false);
+
+    if (search.trim() !== "") {
+      baseQuery = baseQuery.ilike("name", `%${search}%`);
+      dataQuery = dataQuery.ilike("name", `%${search}%`);
     }
 
-    const { data, error } = await supabase
-      .from(table)
-      .select("*")
-      .eq("is_deleted", false)
-      .range(offset, offset + limit - 1);
 
-    if (error) {
-      return res.status(500).json({ message: error.message });
+    const { count, error: countError } = await baseQuery;
+    if (countError) return res.status(500).json({ message: countError.message });
+
+
+    switch (sort) {
+      case "az":
+        dataQuery = dataQuery.order("name", { ascending: true });
+        break;
+      case "za":
+        dataQuery = dataQuery.order("name", { ascending: false });
+        break;
+      case "price-asc":
+        dataQuery = dataQuery.order("cost", { ascending: true });
+        break;
+      case "price-desc":
+        dataQuery = dataQuery.order("cost", { ascending: false });
+        break;
+      case "category":
+        dataQuery = dataQuery.order("category", { ascending: true });
+        break;
     }
+
+    const { data, error } = await dataQuery.range(offset, offset + limit - 1);
+    if (error) return res.status(500).json({ message: error.message });
 
     return res.status(200).json({
       page,
       limit,
-      total: count,
-      totalPages: Math.ceil(count / limit),
+      total: count || 0,
+      totalPages: Math.ceil((count || 0) / limit),
       data,
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
 });
+
+
+
 
 router.post("/delete", async (req, res) => {
     const {skuid} = req.query
