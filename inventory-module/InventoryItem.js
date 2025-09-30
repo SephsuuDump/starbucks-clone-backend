@@ -92,7 +92,7 @@ router.get("/find-by-skuid", async (req, res) => {
 
     const {data, error} = await supabase 
     .from(table)
-    .select('name, category, cost, unit_measurement, description')
+    .select('name, category, cost, unit_measurement, description, required_stock')
     .eq('skuid', skuid)
     .eq('is_deleted', false)
     .maybeSingle()
