@@ -5,7 +5,7 @@ import { getTransferById } from "./TransferRequest.js";
 const router = express.Router();
 const table = "inventory";
 const transactionTable = "inventory_transaction"
-const responseFields = 'id, qty, inventory_item:inventory_item_id(name, unit_measurement) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
+const responseFields = 'id, qty, inventory_item:inventory_item_id(skuid ,name, unit_measurement, required_stock) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
 
 
 export async function createInventoryRecord(body) {
@@ -87,40 +87,82 @@ router.get("/get-all", async (req, res) => {
 
 router.get("/get-by-warehouse", async (req, res) => {
   const { warehouse_id } = req.query;
+  const page = parseInt(req.query.page);
+  const limit = parseInt(req.query.limit);
+  const offset = (page -1) * limit
 
-  if (!warehouse_id) return res.status(400).json("Warehouse id is required");
+  if (!warehouse_id || !page || !limit )  {
+    return res.status(400).json("Fill up all fields ");
+  }
+  const {count} = await supabase
+  .from(table)
+  .select('*', {count: 'exact', head: true})
+  .eq('is_deleted', false)
+  .eq('warehouse_id', warehouse_id)
 
   const { data, error } = await supabase
     .from(table)
     .select(responseFields)
-    .eq("warehouse_id", warehouse_id);
+    .order("inventory_item(name)", { ascending: true })
+    .eq("warehouse_id", warehouse_id)
+    .eq('is_deleted', false)
+    .range(offset, offset + limit -1 )
 
   if (error) return res.status(500).json({ message: error.message });
 
   if (!data || data.length === 0)
     return res.status(404).json({ message: "No inventory found for this warehouse" });
 
-  return res.status(200).json(data);
+  return res.status(200).json({
+    data,
+    limit,
+    total : count  || 0,
+    totalPages : Math.ceil((count || 0) / limit),
+  });
 });
 
 
 router.get("/get-by-branch", async (req, res) => {
   const { branch_id } = req.query;
+  const page = parseInt(req.query.page);
+  const limit = parseInt(req.query.limit);
+  const offset = (page - 1) * limit;
 
   if (!branch_id) return res.status(400).json("branch id is required");
+
+  const { count, error: countError } = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .eq("branch_id", branch_id);
+
+  if (countError) {
+    return res.status(500).json({ message: countError.message });
+  }
 
   const { data, error } = await supabase
     .from(table)
     .select(responseFields)
-    .eq("branch_id", branch_id);
+    .eq("branch_id", branch_id)
+    .eq("is_deleted", false)
+    .order("inventory_item(name)", { ascending: true })
+    .range(offset, offset + limit - 1);
 
   if (error) return res.status(500).json({ message: error.message });
 
-  if (!data || data.length === 0)
-    return res.status(404).json({ message: "No inventory found for this warehouse" });
+  if (!data || data.length === 0) {
+    return res.status(404).json({ message: "No inventory found for this branch" });
+  }
 
-  return res.status(200).json(data);
+  return res.status(200).json({
+    page,
+    data,
+    total: count || 0,
+    totalPages: Math.ceil((count || 0) / limit),
+  });
 });
+
+
 
 router.post("/delete", async (req, res) => {
   const { id } = req.query;
@@ -145,7 +187,7 @@ router.post("/delete", async (req, res) => {
 
   if (error) return res.status(500).json({ message: error.message });
 
-  return res.status(200).send("Deleted inventory record with id " + id);
+  return res.status(200).json(data);
 });
 
 
