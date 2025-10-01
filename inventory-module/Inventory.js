@@ -86,61 +86,78 @@ router.get("/get-all", async (req, res) => {
 });
 
 router.get("/get-by-warehouse", async (req, res) => {
-  const { warehouse_id } = req.query;
-  const page = parseInt(req.query.page);
-  const limit = parseInt(req.query.limit);
-  const offset = (page -1) * limit
+  const { warehouse_id, search } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = (page - 1) * limit;
 
-  if (!warehouse_id || !page || !limit )  {
-    return res.status(400).json("Fill up all fields ");
+  if (!warehouse_id) return res.status(400).json("Warehouse_id is required");
+
+  let countQuery = supabase
+    .from(table)
+    .select("inventory_item(name)", { count: "exact", head: true })
+    .eq("is_deleted", false)
+    .eq("warehouse_id", warehouse_id);
+
+  if (search) {
+    countQuery = countQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.name", `%${search}%`);
   }
-  const {count} = await supabase
-  .from(table)
-  .select('*', {count: 'exact', head: true})
-  .eq('is_deleted', false)
-  .eq('warehouse_id', warehouse_id)
 
-  const { data, error } = await supabase
+  const { count, error: countError } = await countQuery;
+  if (countError) return res.status(500).json({ message: countError.message });
+
+  let dataQuery = supabase
     .from(table)
     .select(responseFields)
-    .order("inventory_item(name)", { ascending: true })
     .eq("warehouse_id", warehouse_id)
-    .eq('is_deleted', false)
-    .range(offset, offset + limit -1 )
+    .eq("is_deleted", false)
+    .order("inventory_item(name)", { ascending: true })
+    .range(offset, offset + limit - 1);
 
+  if (search) {
+    dataQuery = dataQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.name", `%${search}%`);
+  }
+
+  const { data, error } = await dataQuery;
   if (error) return res.status(500).json({ message: error.message });
 
-  if (!data || data.length === 0)
-    return res.status(404).json({ message: "No inventory found for this warehouse" });
-
   return res.status(200).json({
-    data,
-    limit,
-    total : count  || 0,
-    totalPages : Math.ceil((count || 0) / limit),
+    page,
+    data: data || [],
+    total: count || 0,
+    totalPages: Math.ceil((count || 0) / limit),
   });
 });
 
 
 router.get("/get-by-branch", async (req, res) => {
-  const { branch_id } = req.query;
-  const page = parseInt(req.query.page);
-  const limit = parseInt(req.query.limit);
+  const { branch_id, search } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
 
   if (!branch_id) return res.status(400).json("branch id is required");
 
-  const { count, error: countError } = await supabase
+  let countQuery = supabase
     .from(table)
-    .select("*", { count: "exact", head: true })
+    .select("inventory_item(name)", { count: "exact", head: true })
     .eq("is_deleted", false)
     .eq("branch_id", branch_id);
 
-  if (countError) {
-    return res.status(500).json({ message: countError.message });
+  if (search) {
+    countQuery = countQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.name", `%${search}%`);
   }
 
-  const { data, error } = await supabase
+  const { count, error: countError } = await countQuery;
+  if (countError) return res.status(500).json({ message: countError.message });
+
+  let dataQuery = supabase
     .from(table)
     .select(responseFields)
     .eq("branch_id", branch_id)
@@ -148,19 +165,23 @@ router.get("/get-by-branch", async (req, res) => {
     .order("inventory_item(name)", { ascending: true })
     .range(offset, offset + limit - 1);
 
-  if (error) return res.status(500).json({ message: error.message });
-
-  if (!data || data.length === 0) {
-    return res.status(404).json({ message: "No inventory found for this branch" });
+  if (search) {
+    dataQuery = dataQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.name", `%${search}%`);
   }
+
+  const { data, error } = await dataQuery;
+  if (error) return res.status(500).json({ message: error.message });
 
   return res.status(200).json({
     page,
-    data,
+    data: data || [],
     total: count || 0,
     totalPages: Math.ceil((count || 0) / limit),
   });
 });
+
 
 
 
