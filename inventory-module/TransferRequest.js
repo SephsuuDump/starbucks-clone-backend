@@ -6,18 +6,22 @@ const router = express.Router()
 const table = 'transfer_request'
 const itemTable = 'transfer_item'
 const responseFields = `
-      id,
-      from_warehouse,
-      to_branch,
-      to_warehouse,
-      status,
-      total_cost,
-      transfer_item (
-        inventory_item_id,
-        quantity,
-        cost
-      )
-    `;
+  id,
+  from_warehouse(id, name),
+  to_branch(id, name),
+  to_warehouse(id, name),
+  status,
+  total_cost,
+  transfer_item (
+    id,
+    quantity,
+    cost,
+    inventory_item (
+      skuid,
+      name
+    )
+  )
+`;
 
 export async function getTransferById(transferId) {
   const {data} = await supabase
@@ -117,7 +121,6 @@ router.get("/get-all", async (req, res) => {
   }
 });
 
-
 router.get("/get-by-id", async (req, res) => {
   const { id } = req.query;
 
@@ -142,31 +145,43 @@ router.get("/get-by-id", async (req, res) => {
 });
 
 router.get("/get-by-destination", async (req, res) => {
-    const { destination } = req.query;
+  const { destination, status } = req.query;
 
-    try {
-        const {data, error}  = await supabase
-        .from(table)
-        .select(responseFields)
-        .or(`to_warehouse.eq.${destination}, to_branch.eq.${destination}`)  
-        .maybeSingle();
-        
-        if(error) {return res.status(500).json({message : error.message})}
+  if (!destination || !status) {
+    return res.status(400).json({ message: "destination and status are required" });
+  }
 
-        return res.status(200).json(data)
-    } catch (err) {
-        return res.status(500).json({message : err.message})
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select(responseFields)
+      .or(`to_warehouse.eq.${destination},to_branch.eq.${destination}`)
+      .eq('status', String(status).toUpperCase());
+
+    if (error) {
+      return res.status(500).json({ message: error.message });
     }
-})
+
+    return res.status(200).json(data);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
 
 router.get("/get-by-source", async (req,res) => {
-     const { source } = req.query;
+     const { source, status } = req.query;
+
+     if(!source || !status) {
+       return res.status(400).json({ message: "source and status are required" });
+     }
 
     try {
         const {data, error}  = await supabase
         .from(table)
         .select(responseFields)
         .eq('from_warehouse', source)
+        .eq('status', status)
         
         if(error) {return res.status(500).json({message : error.message})}
 

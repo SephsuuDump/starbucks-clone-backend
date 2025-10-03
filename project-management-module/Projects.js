@@ -84,7 +84,7 @@ router.post("/update", async (req, res) => {
             return  res.status(500).json({message : projectErr.message})
         }
 
-        return res.status(200).json({message: `Delete project ${data.name}`})
+        return res.status(200).json(data)
 
 
 
@@ -128,7 +128,7 @@ router.post("/delete-by-id" , async (req, res) => {
             return  res.status(500).json({message : projectErr.message})
         }
 
-        return res.status(200).json({message: `Delete project ${data.name}`})
+        return res.status(200).json({message: `Delete project ${data[0].name}`})
 
 
 
