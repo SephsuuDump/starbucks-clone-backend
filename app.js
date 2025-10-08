@@ -10,6 +10,8 @@ import purchaseOrderRoute from './procurement-module/purchase-order.js';
 import purchaseOrderItemRoute from './procurement-module/purchase-order-item.js';
 import warehouseRouter from './inventory-module/Warehouse.js'
 import transferRoute from './inventory-module/TransferRequest.js'
+import projectRoute from './project-management-module/Projects.js'
+import tasksRoute from './project-management-module/Tasks.js'
 
 
 app.use('/api/auth', authRoute);
@@ -23,6 +25,8 @@ app.use('/api/users', userRoute);
 app.use('/api/branch', branchRoute)
 app.use('/api/warehouse', warehouseRouter)
 app.use('/api/transfer', transferRoute)
+app.use('/api/projects', projectRoute)
+app.use('/api/tasks', tasksRoute)
 
 
 

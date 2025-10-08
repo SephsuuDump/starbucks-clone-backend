@@ -39,10 +39,7 @@ router.post("/create", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.status(201).json({
-      message: "Task created successfully",
-      data,
-    });
+    return res.status(201).json(data);
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -82,10 +79,7 @@ router.put("/update", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.status(200).json({
-      message: `Task ${id} updated successfully`,
-      data: data[0],
-    });
+    return res.status(200).json(data);
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -115,10 +109,7 @@ router.delete("/delete-by-id", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.status(200).json({
-      message: `Task ${id} deleted successfully`,
-      data: data[0],
-    });
+    return res.status(200).json(data);
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
