@@ -12,10 +12,12 @@ import warehouseRouter from './inventory-module/Warehouse.js'
 import transferRoute from './inventory-module/TransferRequest.js'
 import projectRoute from './project-management-module/Projects.js'
 import tasksRoute from './project-management-module/Tasks.js'
+import inventoryLogsRoute from './inventory-module/InventoryLogs.js'
 
 
 app.use('/api/auth', authRoute);
 app.use('/api/inventory-item',inventoryItem)
+app.use('/api/inventory-logs', inventoryLogsRoute)
 app.use('/api/inventory',inventoryRoute)
 app.use('/api/purchase-orders', purchaseOrderRoute);
 app.use('/api/purchase-order-items', purchaseOrderItemRoute);

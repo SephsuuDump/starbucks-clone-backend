@@ -216,13 +216,21 @@ router.post("/process-input", async (req, res) => {
   const { id, quantity } = req.query;
 
   if (!id || !quantity) {
-    return res.status(400).json({ message: "Inventory Id and changed quantity is required" }); 
+    return res
+      .status(400)
+      .json({ message: "Inventory Id and quantity are required" });
   }
 
   try {
+    const changedQuantity = Number(quantity);
+
+    if (isNaN(changedQuantity)) {
+      return res.status(400).json({ message: "Quantity must be a valid number" });
+    }
+
     const { data: existing, error: fetchError } = await supabase
       .from(table)
-      .select("id, qty")  
+      .select("id, qty")
       .eq("id", id)
       .single();
 
@@ -230,8 +238,11 @@ router.post("/process-input", async (req, res) => {
       return res.status(500).json({ message: fetchError.message });
     }
 
-    const changedQuantity = Number(quantity); 
     const newQuantity = existing.qty + changedQuantity;
+
+    if (newQuantity < 0) {
+      return res.status(400).json({ message: "Resulting stock cannot be negative" });
+    }
 
     const { data: updated, error: updateError } = await supabase
       .from(table)
@@ -244,10 +255,12 @@ router.post("/process-input", async (req, res) => {
       return res.status(500).json({ message: updateError.message });
     }
 
+    const transactionType = changedQuantity >= 0 ? "IN" : "OUT";
+
     const transactionBody = {
       changed_quantity: changedQuantity,
-      source: "INPUT",
-      type: "IN", 
+      source: "MANUAL INPUT",
+      type: transactionType,
       inventory_id: updated.id,
       transfer_request_id: null,
     };
@@ -260,8 +273,10 @@ router.post("/process-input", async (req, res) => {
       return res.status(500).json({ message: transactionError.message });
     }
 
-    return res.status(201).json(updated);
-
+    return res.status(201).json({
+      message: `Inventory ${transactionType === "IN" ? "increased" : "decreased"} successfully`,
+      updated,
+    });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
