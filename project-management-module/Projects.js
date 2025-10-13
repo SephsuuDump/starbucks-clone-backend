@@ -131,8 +131,6 @@ router.post("/delete-by-id" , async (req, res) => {
         return res.status(200).json({message: `Delete project ${data[0].name}`})
 
 
-
-
     } catch (err) {
           return  res.status(500).json({message : err.message})
     }

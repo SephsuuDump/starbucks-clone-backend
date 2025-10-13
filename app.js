@@ -13,6 +13,8 @@ import transferRoute from './inventory-module/TransferRequest.js'
 import projectRoute from './project-management-module/Projects.js'
 import tasksRoute from './project-management-module/Tasks.js'
 import inventoryLogsRoute from './inventory-module/InventoryLogs.js'
+import resourceRoute from './project-management-module/Resource.js'
+import resourceAllocationRoute from './project-management-module/ResourceAllocation.js'
 
 
 app.use('/api/auth', authRoute);
@@ -29,6 +31,8 @@ app.use('/api/warehouse', warehouseRouter)
 app.use('/api/transfer', transferRoute)
 app.use('/api/projects', projectRoute)
 app.use('/api/tasks', tasksRoute)
+app.use('/api/resources', resourceRoute)
+app.use('/api/resource-allocation', resourceAllocationRoute)
 
 
 

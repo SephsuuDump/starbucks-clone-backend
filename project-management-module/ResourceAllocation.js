@@ -4,17 +4,39 @@ import { supabase } from "../config.js";
 const router = express.Router();
 const table = "resource_allocation";
 const responseFields =
-  "id, project_id, task_id, resource_id, quantity, allocated_cost, created_at";
+  "id, task_id, resource_id, quantity, allocated_cost, created_at";
 
 
 router.post("/create", async (req, res) => {
-  const { project_id, task_id, resource_id, quantity, allocated_cost } = req.body;
+  const { task_id, resource_id, quantity, allocated_cost } = req.body;
 
   try {
-    const { data, error } = await supabase
+    if (!task_id || !resource_id || !quantity) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    const { data: resource, error: resourceErr } = await supabase
+      .from("resources")
+      .select("id, name, availability, unit")
+      .eq("id", resource_id)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (resourceErr)
+      return res.status(500).json({ message: resourceErr.message });
+    if (!resource)
+      return res.status(404).json({ message: "Resource not found." });
+
+
+    if (resource.availability < quantity) {
+      return res.status(400).json({
+        message: `Insufficient availability. Only ${resource.availability} ${resource.unit || "units"} left.`,
+      });
+    }
+
+    const { data: allocation, error: insertErr } = await supabase
       .from(table)
       .insert({
-        project_id,
         task_id,
         resource_id,
         quantity,
@@ -24,16 +46,31 @@ router.post("/create", async (req, res) => {
       .select(responseFields)
       .single();
 
-    if (error) return res.status(500).json({ message: error.message });
+    if (insertErr)
+      return res.status(500).json({ message: insertErr.message });
+
+    const newAvailability = resource.availability - quantity;
+
+    const { error: updateErr } = await supabase
+      .from("resources")
+      .update({ availability: newAvailability })
+      .eq("id", resource_id);
+
+    if (updateErr)
+      return res.status(500).json({
+        message: `Allocation created but failed to update resource stock: ${updateErr.message}`,
+      });
+
 
     return res.status(201).json({
-      message: "Resource allocation created successfully",
-      data,
+      message: `Resource allocation created successfully. ${resource.name} availability updated to ${newAvailability}.`,
+      data: allocation,
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
 });
+
 
 
 router.put("/update", async (req, res) => {
@@ -108,12 +145,11 @@ router.delete("/delete-by-id", async (req, res) => {
 });
 
 router.get("/get-all", async (req, res) => {
-  const { project_id, task_id, resource_id } = req.query;
+  const {task_id, resource_id } = req.query;
 
   try {
     let query = supabase.from(table).select(responseFields).eq("is_deleted", false);
 
-    if (project_id) query = query.eq("project_id", project_id);
     if (task_id) query = query.eq("task_id", task_id);
     if (resource_id) query = query.eq("resource_id", resource_id);
 
