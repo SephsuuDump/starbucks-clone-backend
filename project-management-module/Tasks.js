@@ -122,8 +122,8 @@ router.get("/get-all", async (req, res) => {
     let query = supabase.from(table).select(responseFields).eq("is_deleted", false);
 
     if (project_id) query = query.eq("project_id", project_id);
-    if (status) query = query.eq("status", status.toUpperCase());
-    if (start && end) query = query.gte("start_date", start).lte("end_date", end);
+    // if (status) query = query.eq("status", status.toUpperCase());
+    // if (start && end) query = query.gte("start_date", start).lte("end_date", end);
 
     const { data, error } = await query;
 

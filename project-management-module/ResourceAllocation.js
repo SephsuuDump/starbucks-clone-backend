@@ -1,5 +1,5 @@
 import express from "express";
-import { supabase } from "../config.js";
+import { app, supabase } from "../config.js";
 
 const router = express.Router();
 const table = "resource_allocation";
@@ -145,15 +145,39 @@ router.delete("/delete-by-id", async (req, res) => {
 });
 
 router.get("/get-all", async (req, res) => {
-  const {task_id, resource_id } = req.query;
+  const { id } = req.query;
+
+  if (!id) {
+    return res.status(400).json({ message: "project_id is required" });
+  }
 
   try {
-    let query = supabase.from(table).select(responseFields).eq("is_deleted", false);
+    const { data: tasks, error: taskErr } = await supabase
+      .from("tasks")
+      .select("id")
+      .eq("project_id", id)
+      .eq("is_deleted", false);
 
-    if (task_id) query = query.eq("task_id", task_id);
-    if (resource_id) query = query.eq("resource_id", resource_id);
+    if (taskErr) return res.status(500).json({ message: taskErr.message });
+    if (!tasks || tasks.length === 0)
+      return res.status(200).json({ data: [] });
 
-    const { data, error } = await query;
+    const taskIds = tasks.map((t) => t.id);
+
+    const { data, error } = await supabase
+      .from("resource_allocation")
+      .select(`
+        id,
+        task_id,
+        resource_id,
+        quantity,
+        allocated_cost,
+        created_at,
+        resources(name, type, cost_per_unit, unit),
+        tasks(name, description, status, start_date, end_date)
+      `)
+      .in("task_id", taskIds)
+      .eq("is_deleted", false);
 
     if (error) return res.status(500).json({ message: error.message });
 
@@ -162,6 +186,7 @@ router.get("/get-all", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
+
 
 router.get("/get-by-id", async (req, res) => {
   const { id } = req.query;
