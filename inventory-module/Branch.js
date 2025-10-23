@@ -150,7 +150,7 @@ router.post("/delete", async (req, res) => {
 
     if(error) {return res.status(500).json({message : error.message})}
 
-    return res.status(200).send("Deleted branch  " + data[0].name)
+    return res.status(200).json({message : "Deleted branch  " + data[0].name})
     
 })
 
