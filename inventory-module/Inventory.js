@@ -159,6 +159,12 @@ router.get("/get-by-branch", async (req, res) => {
       .ilike("inventory_item.name", `%${search}%`);
   }
 
+  if (category && category.trim() !== "") {
+    countQuery = countQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.category", `%${category}%`);
+  }
+
   const { count, error: countError } = await countQuery;
   if (countError) return res.status(500).json({ message: countError.message });
 
@@ -176,9 +182,10 @@ router.get("/get-by-branch", async (req, res) => {
       .ilike("inventory_item.name", `%${search}%`);
   }
 
-  if(category) {
+  if (category && category.trim() !== "") {
     dataQuery = dataQuery
-    .eq('inventory_item.category', category);
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.category", `%${category}%`);
   }
 
   const { data, error } = await dataQuery;
@@ -191,8 +198,6 @@ router.get("/get-by-branch", async (req, res) => {
     totalPages: Math.ceil((count || 0) / limit),
   });
 });
-
-
 
 
 router.post("/delete", async (req, res) => {

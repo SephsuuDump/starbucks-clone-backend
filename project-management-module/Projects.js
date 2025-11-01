@@ -144,6 +144,8 @@ router.get("/get-all", async (req, res) => {
             const {data, error} = await supabase
             .from(table)
             .select(responseFields)
+            .eq('is_deleted', false)
+
 
             if(error) {return res.status(500).json({message : error.message})}
 
