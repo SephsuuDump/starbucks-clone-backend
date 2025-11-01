@@ -97,6 +97,7 @@ router.get("/get-all", async (req ,res) => {
     .from(table)
     .select(responseFields)
     .eq('is_deleted', false)
+    .order('name', {ascending: true})
 
     if(error) {return res.status(500).json({message: error.message})}
 
