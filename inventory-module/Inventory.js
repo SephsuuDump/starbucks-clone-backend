@@ -55,6 +55,58 @@ router.post("/update", async (req, res) => {
   return res.status(200).json(data);
 });
 
+router.post("/create-all", async (req, res) => {
+  try {
+    const { id, type } = req.query;
+
+    if (!id || !type) {
+      return res.status(400).json({ message: "Missing 'id' or 'type' in query" });
+    }
+    const { data: items, error: itemError } = await supabase
+      .from("inventory_item")
+      .select("*");
+
+    if (itemError) {
+      return res.status(500).json({ message: "Error getting the items", details: itemError });
+    }
+
+    const inventoryRows = items.map((item) => {
+      let record = {
+        inventory_item_id: item.skuid,
+        qty: 0
+      };
+
+      if (type.toLowerCase() === "warehouse") {
+        record.warehouse_id = id;
+        record.branch_id = null;
+      }
+
+      if (type.toLowerCase() === "branch") {
+        record.branch_id = id;
+        record.warehouse_id = null;
+      }
+
+      return record;
+    });
+
+    console.log(inventoryRows)
+
+    const { error: insertError } = await supabase
+      .from(table)
+      .insert(inventoryRows);
+
+    if (insertError) {
+      return res.status(500).json({ message: "Error inserting inventory records", details: insertError });
+    }
+
+    return res.status(201).json({ message: "Inventory records created successfully" });
+
+  } catch (err) {
+    return res.status(500).json({ message: "Server error", details: err.message });
+  }
+});
+
+
 router.get("/get-by-id", async (req, res) => {
   const { id } = req.query;
 

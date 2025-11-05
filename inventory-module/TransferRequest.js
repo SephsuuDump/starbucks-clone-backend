@@ -12,6 +12,9 @@ const responseFields = `
   to_warehouse(id, name),
   status,
   total_cost,
+  expected_arrival,
+  actual_arrival,
+  notes,
   transfer_item (
     id,
     quantity,
@@ -37,7 +40,7 @@ export async function getTransferById(transferId) {
 
 router.post("/create", async (req, res) => {
   try {
-    const { from_warehouse, to_warehouse, to_branch, status, items } = req.body;
+    const { from_warehouse, to_warehouse, to_branch, status, items, expected_arrival } = req.body;
 
     if (!from_warehouse || (!to_warehouse && !to_branch)) {
       return res.status(400).json({ message: "Invalid transfer request: must have to_warehouse or to_branch" });
@@ -52,8 +55,9 @@ router.post("/create", async (req, res) => {
           from_warehouse,
           to_warehouse: to_warehouse || null,
           to_branch: to_branch || null,
-          status: "PENDING",
-          total_cost: totalCost
+          status: status || "PENDING",
+          total_cost: totalCost,
+          expected_arrival : expected_arrival || null
         }
       ])
       .select(responseFields)
