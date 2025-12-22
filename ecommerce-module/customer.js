@@ -30,7 +30,7 @@ router.get('/get-by-id', async (req, res) => {
         customers(*)
     `)
     .eq('id', id)
-    .single();
+    .single();    
 
     if (error) return res.status(500).json({ message: error.message });
     if (!data) return res.status(500).json({ message: `ID ${id} does not exists.` })
@@ -39,9 +39,23 @@ router.get('/get-by-id', async (req, res) => {
 })
 
 router.post('/create', async (req, res) => {
+    const { user_id } = req.body;
+    const { data, error } = await supabase
+    .from(childTable)
+    .insert({
+        user_id
+    })
+    .select('*')
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    return res.json(data);
+})
+
+router.post('/create-batch', async (req, res) => {
     const newCustomer = req.body;
     const { data, error } = await supabase
-    .from(parentTable)
+    .from(childTable)
     .insert(newCustomer)
     .select('*')
 
@@ -51,15 +65,27 @@ router.post('/create', async (req, res) => {
 })
 
 router.patch('/update', async (req, res) => {
-    const updatedCustomer = req.body;
+    const { id, first_name, middle_name, last_name, ...otherFields } = req.body;
+    const { email, ...customerFields } = otherFields;
+    
+    
     const { data, error } = await supabase
     .from(childTable)
-    .update(updatedCustomer)
-    .eq('user_id', updatedCustomer.id)
+    .update(customerFields)
+    .eq('user_id', id)
     .select('*')
     .single();
 
-    if (error) return res.status(500).json({ message: error.message });
+    const { data: userData, error: userError } = await supabase
+    .from(parentTable)
+    .update({
+        first_name: first_name,
+        middle_name: middle_name,
+        last_name: last_name,
+    })
+    .eq('id', id)
+
+    if (error || userError) return res.status(500).json({ message: error.message });
     if (!data) return res.status(500).json({ message: `ID ${updatedCustomer.id} does not exists.` });
 
     return res.json(data);

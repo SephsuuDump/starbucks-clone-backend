@@ -156,7 +156,7 @@ router.get('/get-by-branch', async (req, res) => {
         )
     `)
     .eq('_users.employee.branch.id', id)
-    .order('date', { ascending: false });;
+    .order('date', { ascending: false });
 
     if (error) return res.status(500).json({ message: error.message });
 

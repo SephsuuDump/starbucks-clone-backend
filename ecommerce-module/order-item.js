@@ -2,7 +2,7 @@ import express from "express";
 import { supabase } from "../config.js";
 
 const router = express.Router();
-const parentTable = 'order+items';
+const parentTable = 'order_items';
 
 router.get('/get-all', async (req, res) => {
     const { data, error } = await supabase
@@ -30,12 +30,11 @@ router.get('/get-by-id', async (req, res) => {
 })
 
 router.post('/create', async (req, res) => {
-    const newOrderItem = req.body();
+    const newOrderItem = req.body;
     const { data, error } = await supabase
     .from(parentTable)
     .insert(newOrderItem)
-    .select('*')
-    .single();
+    .select('*');
 
     if (error) return res.status(500).json({ message: error.message });
 
