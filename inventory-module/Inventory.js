@@ -5,7 +5,7 @@ import { getTransferById } from "./TransferRequest.js";
 const router = express.Router();
 const table = "inventory";
 const transactionTable = "inventory_transaction"
-const responseFields = 'id, qty, inventory_item:inventory_item_id(skuid ,name, unit_measurement, required_stock) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
+const responseFields = 'id, qty, inventory_item:inventory_item_id(skuid ,name, unit_measurement, required_stock,category ) , warehouse: warehouse_id (name, location), branch:branch_id (name, location)'
 
 
 export async function createInventoryRecord(body) {
@@ -55,6 +55,58 @@ router.post("/update", async (req, res) => {
   return res.status(200).json(data);
 });
 
+router.post("/create-all", async (req, res) => {
+  try {
+    const { id, type } = req.query;
+
+    if (!id || !type) {
+      return res.status(400).json({ message: "Missing 'id' or 'type' in query" });
+    }
+    const { data: items, error: itemError } = await supabase
+      .from("inventory_item")
+      .select("*");
+
+    if (itemError) {
+      return res.status(500).json({ message: "Error getting the items", details: itemError });
+    }
+
+    const inventoryRows = items.map((item) => {
+      let record = {
+        inventory_item_id: item.skuid,
+        qty: 0
+      };
+
+      if (type.toLowerCase() === "warehouse") {
+        record.warehouse_id = id;
+        record.branch_id = null;
+      }
+
+      if (type.toLowerCase() === "branch") {
+        record.branch_id = id;
+        record.warehouse_id = null;
+      }
+
+      return record;
+    });
+
+    console.log(inventoryRows)
+
+    const { error: insertError } = await supabase
+      .from(table)
+      .insert(inventoryRows);
+
+    if (insertError) {
+      return res.status(500).json({ message: "Error inserting inventory records", details: insertError });
+    }
+
+    return res.status(201).json({ message: "Inventory records created successfully" });
+
+  } catch (err) {
+    return res.status(500).json({ message: "Server error", details: err.message });
+  }
+});
+
+
 router.get("/get-by-id", async (req, res) => {
   const { id } = req.query;
 
@@ -86,7 +138,7 @@ router.get("/get-all", async (req, res) => {
 });
 
 router.get("/get-by-warehouse", async (req, res) => {
-  const { warehouse_id, search } = req.query;
+  const { warehouse_id, search, category } = req.query;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
@@ -122,6 +174,11 @@ router.get("/get-by-warehouse", async (req, res) => {
       .ilike("inventory_item.name", `%${search}%`);
   }
 
+  if(category) {
+    dataQuery = dataQuery
+    .eq('inventory_item.category', category)
+  }
+
   const { data, error } = await dataQuery;
   if (error) return res.status(500).json({ message: error.message });
 
@@ -135,7 +192,7 @@ router.get("/get-by-warehouse", async (req, res) => {
 
 
 router.get("/get-by-branch", async (req, res) => {
-  const { branch_id, search } = req.query;
+  const { branch_id, search, category } = req.query;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
@@ -152,6 +209,12 @@ router.get("/get-by-branch", async (req, res) => {
     countQuery = countQuery
       .not("inventory_item", "is", null)
       .ilike("inventory_item.name", `%${search}%`);
+  }
+
+  if (category && category.trim() !== "") {
+    countQuery = countQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.category", `%${category}%`);
   }
 
   const { count, error: countError } = await countQuery;
@@ -171,6 +234,12 @@ router.get("/get-by-branch", async (req, res) => {
       .ilike("inventory_item.name", `%${search}%`);
   }
 
+  if (category && category.trim() !== "") {
+    dataQuery = dataQuery
+      .not("inventory_item", "is", null)
+      .ilike("inventory_item.category", `%${category}%`);
+  }
+
   const { data, error } = await dataQuery;
   if (error) return res.status(500).json({ message: error.message });
 
@@ -181,8 +250,6 @@ router.get("/get-by-branch", async (req, res) => {
     totalPages: Math.ceil((count || 0) / limit),
   });
 });
-
-
 
 
 router.post("/delete", async (req, res) => {

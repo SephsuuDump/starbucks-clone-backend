@@ -7,7 +7,7 @@ const responseFields =
   "id, type, name, cost_per_unit, unit, availability, project:project_id(id,name)";
 
 router.post("/create", async (req, res) => {
-  const { type, name, cost_per_unit, unit, availability, project_id  } = req.body;
+  const { type, name, cost_per_unit, unit, availability, project_id } = req.body;
 
   try {
     const { data, error } = await supabase
@@ -26,7 +26,7 @@ router.post("/create", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.status(201).json(data);R
+    return res.status(201).json(data);
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -47,7 +47,8 @@ router.put("/update", async (req, res) => {
       .maybeSingle();
 
     if (findErr) return res.status(500).json({ message: findErr.message });
-    if (!existing) return res.status(404).json({ message: "Resource not found" });
+    if (!existing)
+      return res.status(404).json({ message: "Resource not found" });
 
     const { data, error } = await supabase
       .from(table)
@@ -86,7 +87,8 @@ router.delete("/delete-by-id", async (req, res) => {
       .maybeSingle();
 
     if (findErr) return res.status(500).json({ message: findErr.message });
-    if (!existing) return res.status(404).json({ message: "Resource not found" });
+    if (!existing)
+      return res.status(404).json({ message: "Resource not found" });
 
     const { data, error } = await supabase
       .from(table)
@@ -142,23 +144,20 @@ router.get("/get-by-id", async (req, res) => {
   return res.status(200).json({ data });
 });
 
-
 router.get("/get-by-project", async (req, res) => {
-  const {id} = req.query;
+  const { id } = req.query;
 
   if (!id) return res.status(400).json({ message: "id is required" });
 
-  const {data, error } = await supabase
-  .from(table)
-  .select(responseFields)
-  .eq("project_id", id)
-  .eq("is_deleted", false)
+  const { data, error } = await supabase
+    .from(table)
+    .select(responseFields)
+    .eq("project_id", id)
+    .eq("is_deleted", false);
 
-  if(error) return res.status(500).json({message: error.message})
+  if (error) return res.status(500).json({ message: error.message });
 
-  return res.status(200).json(data)
-
-
-})
+  return res.status(200).json(data);
+});
 
 export default router;
