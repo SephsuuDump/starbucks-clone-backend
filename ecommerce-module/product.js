@@ -1,7 +1,8 @@
 import express from "express";
 import { supabase } from "../config.js";
 import multer from "multer";
-import { formatBranchProducts } from "./_helper.js";
+import { formatBranchProductLog, formatBranchProducts } from "./_helper.js";
+import { formatProducts } from "../sales-module/_helper.js";
 
 const router = express.Router();
 const parentTable = 'products';
@@ -11,12 +12,15 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.get('/get-all', async (req, res) => {
     const { data, error } = await supabase
     .from(parentTable)
-    .select(`*`)
+    .select(`
+        *,
+        product_inventory_item(*, inventory_item(*))
+    `)
     .eq('is_deleted', false)
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.json(data);
+    return res.json(formatProducts(data));
 })
 
 router.get('/get-by-id', async (req, res) => {
@@ -57,6 +61,28 @@ router.get('/get-by-branch', async (req, res) => {
 
     return res.json(formatBranchProducts(data));
 });
+
+router.get('/get-product-logs-by-id', async (req, res) => {
+  const { id } = req.query;
+
+  const { data, error } = await supabase
+    .from('branch_product_logs')
+    .select(`
+      *,
+      branch_products(*, products(*))
+    `)
+    .eq('branch_product_id', id)
+    .order('created_at', { ascending: false }); 
+
+  if (error) {
+    return res.status(500).json({ message: error.message });
+  }
+
+  const formatted = data.map(formatBranchProductLog);
+
+  return res.json(formatted);
+});
+
 
 router.post('/create', async (req, res) => {
     const newProduct = req.body;
@@ -137,6 +163,33 @@ router.post('/create-branch-products', async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
     
+    return res.json(data)
+})
+
+router.post('/create-inventory-link', async (req, res) => {
+    const { product_id, inventory_items } = req.body;
+        
+    const { data: deleteLinks, error: deleteLinksError }= await supabase
+    .from('product_inventory_item')
+    .delete()
+    .eq('product_id', product_id)    
+
+    if (deleteLinksError) return res.status(500).json({ message: deleteLinksError.message })
+
+    const payload = [
+        ...inventory_items.map(item => ({
+            product_id: product_id,
+            inventory_item_id: item,
+        }))
+    ]    
+
+    const { data, error } = await supabase 
+    .from('product_inventory_item')
+    .insert(payload)
+    .select("*");
+
+    if (error) return res.status(500).json({ message: error.message })
+        
     return res.json(data)
 })
 

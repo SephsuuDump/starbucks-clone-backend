@@ -15,8 +15,11 @@ router.get('/get-all', async (req, res) => {
     `)
     .eq('role', 'CUSTOMER')
     .eq('is_deleted', false)
+    .order('last_name', { ascending: true })
 
     if (error) return res.status(500).json({ message: error.message });
+    console.log(data);
+    
 
     return res.json(formatCustomers(data));
 })

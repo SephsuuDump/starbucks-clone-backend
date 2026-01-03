@@ -18,6 +18,8 @@ import orderItemRoute from './ecommerce-module/order-item.js'
 import accountCreditRoute from './ecommerce-module/account-credit.js'
 
 import salesSummaryRoute from './sales-module/summary.js';
+import salesReportRoute from './sales-module/sales-reports.js'
+import discountRoute from './sales-module/discount.js';
 
 app.use(cors({
   origin: ['http://localhost:3100', 'https://x848qg05-3100.asse.devtunnels.ms'],
@@ -25,7 +27,7 @@ app.use(cors({
 }));
 
 app.use('/api/auth', authRoute);
-app.use('/api/inventory-item',inventoryItem)
+app.use('/api/inventory-items',inventoryItem)
 // app.use('/api/inventory-logs', inventoryLogsRoute)
 app.use('/api/inventory',inventoryRoute)
 app.use('/api/branch', branchRoute)
@@ -44,6 +46,8 @@ app.use('/api/order-items', orderItemRoute)
 app.use('/api/account-credit', accountCreditRoute)
 
 app.use('/api/sales-summary', salesSummaryRoute)
+app.use('/api/sales-report', salesReportRoute)
+app.use('/api/discounts', discountRoute)
 
 
 const PORT = process.env.PORT || 6000

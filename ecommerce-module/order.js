@@ -1,7 +1,7 @@
 import express from "express";
 import { supabase } from "../config.js";
 import { now } from "mongoose";
-import { formatSalesOrders } from "./_helper.js";
+import { formatSalesOrder, formatSalesOrders } from "./_helper.js";
 
 const router = express.Router();
 const parentTable = 'sales_orders';
@@ -13,28 +13,38 @@ router.get('/get-all', async (req, res) => {
     .select(`
         *, 
         order_items(
-            *, branch_products(*)
-        )
+            *, branch_products(*, products(*))
+        ),
+        _users(*, customers(*)),
+        branch(*)
     `)
     .eq('is_deleted', false)
+    .order('created_at', { ascending: false })
 
     if (error) return res.status(500).json({ message: error.message });
 
-    return res.json(data);
+    return res.json(formatSalesOrders(data));
 })
 
 router.get('/get-by-id', async (req, res) => {
     const { id } = req.query;
     const { data, error } = await supabase
     .from(parentTable)
-    .select(`*`)
+    .select(`
+        *, 
+        order_items(
+            *, branch_products(*, products(*))
+        ),
+        _users(*, customers(*)),
+        branch(*)
+    `)
     .eq('id', id)
     .single();
 
     if (error) return res.status(500).json({ message: error.message });
     if (!data) return res.status(500).json({ message: `ID ${id} does not exists.` })
 
-    return res.json(data);
+    return res.json(formatSalesOrder(data));
 })
 
 router.get('/get-by-customer', async (req, res) => {
@@ -67,7 +77,8 @@ router.get('/get-by-branch', async (req, res) => {
         order_items(
             *, branch_products(*, products(*))
         ),
-        _users(*, customers(*))
+        _users(*, customers(*)),
+        branch(*)
     `)
     .eq('branch_id', id)
     .order('updated_at', { ascending: false });
@@ -130,13 +141,12 @@ router.post('/create', async (req, res) => {
 });
 
 router.post('/complete-order', async (req, res) => {
-    const { id, order_items } = req.body;
+    const { branchId, id, order_items } = req.body;
 
     for (const item of order_items) {
         const productId = item.id;
         const orderedQty = item.quantity;
 
-        // Get latest stock from DB
         const { data: product, error: fetchError } = await supabase
             .from('branch_products')
             .select('stock')
@@ -147,7 +157,6 @@ router.post('/complete-order', async (req, res) => {
             return res.status(500).json({ message: fetchError.message });
         }
 
-        // Check if enough stock exists
         if (!product || product.stock < orderedQty) {
             return res.status(400).json({
                 message: `Insufficient stock for product: ${item.name}`
@@ -156,11 +165,56 @@ router.post('/complete-order', async (req, res) => {
 
         const newStock = product.stock - orderedQty;
 
-        // Deduct stock
+        const { data: logData, error: logError } = await supabase
+            .from('branch_product_logs')
+            .insert({
+                quantity: orderedQty,
+                flow: "OUT",
+                branch_product_id: productId,
+            })
+
+        if (logError) {
+            return res.status(500).json({ message: fetchError.message });
+        }
+
         const { error: updateError } = await supabase
             .from('branch_products')
             .update({ stock: newStock })
             .eq('id', productId);
+
+        const { data: inv, error: invError } = await supabase
+        .from('product_inventory_item')
+        .select('*')
+        .eq('product_id', item.product_id);
+        console.log('prod id', item.product_id);
+        
+        console.log(inv);
+        
+
+        if (invError) throw invError.message;
+        if (!inv || inv.length === 0) return;
+    
+        for (const subItem of inv) {
+            const { data: inventory, error: inventoryError } = await supabase
+                .from('inventory')
+                .select('*')
+                .eq('branch_id', branchId)
+                .eq('inventory_item_id', subItem.inventory_item_id)
+                .single();
+            console.log('inve', inventory);
+            
+
+            if (inventoryError) continue;
+            const { error: updateError } = await supabase
+                .from('inventory')
+                .update({
+                qty: inventory.qty - 1
+                })
+                .eq('id', inventory.id);
+
+            if (updateError) throw updateError.message;
+        }
+
 
         if (updateError) {
             return res.status(500).json({ message: updateError.message });

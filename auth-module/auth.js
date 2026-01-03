@@ -181,7 +181,7 @@ router.post("/signup", async (req, res) => {
                     error: "User created but customer entry failed: " + customerError.message ?? creditError.message,
                 });
             }
-        }
+        } 
 
         return res.status(201).json(user);
 
