@@ -112,6 +112,13 @@ export function formatSalesOrder(item) {
         branch: item.branch
             ? { name: item.branch.name }
             : null,
+        discounts: item.order_discounts 
+            ? item.order_discounts.map((subItem) => ({
+                id: subItem.discounts.id,
+                name: subItem.discounts.name,
+                type: subItem.discounts.type,
+                value: subItem.discounts.value,
+            })) : null,
     };
 }
 
@@ -141,9 +148,14 @@ export function formatSalesOrders(items) {
             id: item.branch.id,
             name: item.branch.name
         } : null,
+        discounts: item.order_discounts ? item.order_discounts.map((subItem) => ({
+            id: subItem.discounts.id,
+            name: subItem.discounts.name,
+            type: subItem.discounts.type,
+            value: subItem.discounts.value,
+        })) : null,
     }))
 }
-
 
 export function formatBranchProductLog(item) {
   const product = item?.branch_products?.products;

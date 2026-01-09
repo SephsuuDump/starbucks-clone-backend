@@ -30,6 +30,11 @@ router.get('/get-summary', async (req, res) => {
     .from(discountsTable)
     .select('*', { count: 'exact', head: true })
 
+    const { count: totalQuotations, error: totalQuotationsError } = await supabase
+    .from(primaryTable)
+    .select('*', { count: 'exact', head: true })
+    .gt('discount_amount', 0)   
+
     const { data: salesOverview, error: salesOverviewError } = await supabase.rpc("get_sales_last_6_months");
     
     const [
@@ -60,6 +65,7 @@ router.get('/get-summary', async (req, res) => {
     if (totalCustomersError) return res.status(500).json({ message: totalCustomersError.message });
     if (totalProductsError) return res.status(500).json({ message: totalProductsError.message });
     if (totalDiscountsError) return res.status(500).json({ message: totalDiscountsError.message });
+    if (totalQuotationsError) return res.status(500).json({ message: totalQuotationsError.message });
     if (salesOverviewError) return res.status(500).json({ message: salesOverviewError.message });
     if (newCustomerRes.error || activeRes.error || inactiveRes.error) {
         return res.status(500).json({
@@ -75,6 +81,7 @@ router.get('/get-summary', async (req, res) => {
         salesOverview,
         totalProducts,
         totalDiscounts,
+        totalQuotations,
         customerInsights: [
             { type: "New Customer", count: newCustomerRes.count },
             { type: "Active Customer", count: activeRes.count },

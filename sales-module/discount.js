@@ -3,6 +3,7 @@ import { supabase } from "../config.js";
 
 const router = Router();
 const primaryTable = 'discounts';
+const secondaryTable = 'order_discounts';
 
 router.get('/get-all', async (req, res) => {
     const { data, error } = await supabase
@@ -26,6 +27,21 @@ router.post('/create', async (req, res) => {
     .single();
 
     if (error) return res.status(500).json({ message: error.message })
+
+    return res.json(data)
+})
+
+router.post('/create-order-discount', async (req, res) => {
+    const orderDiscount = req.body;
+    const { data, error } = await supabase
+    .from(secondaryTable)
+    .insert(orderDiscount)
+    .select('*')
+
+    if (error) {
+        console.log('discount error', error.message);
+        return res.status(500).json({ message: error.message })
+    }
 
     return res.json(data)
 })

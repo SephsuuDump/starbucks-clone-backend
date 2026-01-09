@@ -39,7 +39,8 @@ router.get('/get-by-employee', async (req, res) => {
     .select(`
         *,
         employee(
-            branch(id, name)
+            branch(id, name),
+            warehouse(id, name)
         )
     `)
     .eq('id', id)
@@ -50,6 +51,10 @@ router.get('/get-by-employee', async (req, res) => {
         branch: {
             id: data.employee.branch.id,
             name: data.employee.branch.name,
+        },
+        warehouse: {
+            id: data.employee.warehouse.id,
+            name: data.employee.warehouse.name,
         },
         employee: undefined
     }

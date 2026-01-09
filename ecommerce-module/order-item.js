@@ -23,7 +23,10 @@ router.get('/get-by-id', async (req, res) => {
     .eq('id', id)
     .single();
 
-    if (error) return res.status(500).json({ message: error.message });
+    if (error) {
+        console.log('order item error', error.message);
+        return res.status(500).json({ message: error.message });
+    }
     if (!data) return res.status(500).json({ message: `ID ${id} does not exists.` })
 
     return res.json(data);
