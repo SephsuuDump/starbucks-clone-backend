@@ -1,5 +1,6 @@
 import express from "express";
 import { supabase } from "../config.js";
+import { logProjectActivity } from "./utils/ProjectActivityLogger.js";
 
 const router = express.Router();
 const table = "tasks";
@@ -9,7 +10,6 @@ const responseFields =
 
 const responseFields2 =
   "id, project_id, name, description, start_date, expected_date, end_date, employee_id, status, employee:employee_id ( id, job_title, user:user_id ( first_name, last_name ) )";
-
 
 
 export async function recalcProjectStatus(projectId) {
@@ -44,12 +44,10 @@ export async function recalcProjectStatus(projectId) {
       ["PENDING_ALLOCATIONS", "IN_PROGRESS", "DONE"].includes(t.status)
     ) || false;
 
-
   let progress = 0;
   if (totalTasks > 0) {
     progress = Number(((doneTasks / totalTasks) * 100).toFixed(2));
   }
-
 
   let allAllocApproved = true;
 
@@ -66,7 +64,6 @@ export async function recalcProjectStatus(projectId) {
       allAllocApproved = allocations.every(a => a.is_approved === true);
     }
   }
-
 
   let status = "PENDING";
 
@@ -89,6 +86,16 @@ export async function recalcProjectStatus(projectId) {
   }
 
   await supabase.from("projects").update(updateData).eq("id", projectId);
+
+  await logProjectActivity({ // log project status recalculation
+    project_id: projectId, // reference affected project
+    actor_id: null, // system-triggered action
+    actor_role: "SYSTEM", // system role
+    entity_type: "PROJECT", // project-level action
+    entity_id: projectId, // affected project
+    action: "PROJECT_STATUS_UPDATED", // status change action
+    description: `Project status recalculated to ${status}`, // readable log message
+  });
 }
 
 
@@ -125,6 +132,16 @@ router.post("/create", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
+    await logProjectActivity({ // log task creation
+      project_id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: req.user?.role ?? "PM", // PM role
+      entity_type: "TASK", // task-level action
+      entity_id: data.id, // affected task
+      action: "TASK_CREATED", // action keyword
+      description: `Task "${data.name}" was created`, // readable log message
+    });
+
     await recalcProjectStatus(project_id);
 
     return res.status(201).json(data);
@@ -132,7 +149,6 @@ router.post("/create", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
-
 
 
 router.put("/update", async (req, res) => {
@@ -178,6 +194,16 @@ router.put("/update", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
+    await logProjectActivity({ // log task update
+      project_id: task.project_id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: req.user?.role ?? "PM", // PM role
+      entity_type: "TASK", // task-level action
+      entity_id: task.id, // affected task
+      action: "TASK_UPDATED", // action keyword
+      description: `Task "${task.name}" was updated`, // readable log message
+    });
+
     await recalcProjectStatus(task.project_id);
 
     return res.status(200).json(data);
@@ -220,6 +246,19 @@ router.post("/respond", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
+    await logProjectActivity({ // log task acceptance or rejection
+      project_id: task.project_id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: "EMPLOYEE", // employee role
+      entity_type: "TASK", // task-level action
+      entity_id: task.id, // affected task
+      action: upperAction === "ACCEPT" ? "TASK_ACCEPTED" : "TASK_REJECTED", // response action
+      description:
+        upperAction === "ACCEPT"
+          ? `Task "${task.name}" was accepted`
+          : `Task "${task.name}" was rejected`, // readable log message
+    });
+
     await recalcProjectStatus(task.project_id);
 
     return res.status(200).json({
@@ -230,7 +269,6 @@ router.post("/respond", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
-
 
 
 router.post("/mark-done", async (req, res) => {
@@ -259,6 +297,16 @@ router.post("/mark-done", async (req, res) => {
       .select(responseFields);
 
     if (error) return res.status(500).json({ message: error.message });
+
+    await logProjectActivity({ // log task completion
+      project_id: task.project_id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: "EMPLOYEE", // employee role
+      entity_type: "TASK", // task-level action
+      entity_id: task.id, // affected task
+      action: "TASK_COMPLETED", // completion action
+      description: `Task "${task.name}" was marked as DONE`, // readable log message
+    });
 
     await recalcProjectStatus(task.project_id);
 
@@ -291,6 +339,16 @@ router.delete("/delete-by-id", async (req, res) => {
       .update({ is_deleted: true })
       .eq("id", id)
       .select(responseFields);
+
+    await logProjectActivity({ // log task deletion
+      project_id: task.project_id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: req.user?.role ?? "PM", // PM role
+      entity_type: "TASK", // task-level action
+      entity_id: task.id, // affected task
+      action: "TASK_DELETED", // deletion action
+      description: `Task "${task.name}" was deleted`, // readable log message
+    });
 
     await recalcProjectStatus(task.project_id);
 
@@ -338,7 +396,6 @@ router.get("/get-by-id", async (req, res) => {
 });
 
 
-
 router.get("/get-by-employee", async (req, res) => {
   const { employee_id } = req.query;
 
@@ -359,6 +416,5 @@ router.get("/get-by-employee", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
-
 
 export default router;

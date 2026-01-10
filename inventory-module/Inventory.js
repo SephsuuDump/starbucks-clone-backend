@@ -14,6 +14,11 @@ export async function createInventoryRecord(body) {
     .insert(body)
 }
 
+router.post('create-all', async(req, res) => {
+  const branchId = req.body;
+  cons
+})
+
 router.post("/create", async (req, res) => {
   const body = req.body;
   const { data, error } = await supabase

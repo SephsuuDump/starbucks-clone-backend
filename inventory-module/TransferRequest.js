@@ -148,51 +148,93 @@ router.get("/get-by-id", async (req, res) => {
   }
 });
 
+
 router.get("/get-by-destination", async (req, res) => {
-  const { destination, status } = req.query;
+  const { destination, status, page = 1, limit = 5 } = req.query
 
   if (!destination || !status) {
-    return res.status(400).json({ message: "destination and status are required" });
+    return res.status(400).json({
+      message: "destination and status are required",
+    })
   }
+
+  const pageNum = Math.max(Number(page), 1)
+  const limitNum = Math.max(Number(limit), 1)
+  const from = (pageNum - 1) * limitNum
+  const to = from + limitNum - 1
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
-      .select(responseFields)
+      .select(responseFields, { count: "exact" })
       .or(`to_warehouse.eq.${destination},to_branch.eq.${destination}`)
-      .eq('status', String(status).toUpperCase());
+      .eq("status", String(status).toUpperCase())
+
+    if (String(status).toUpperCase() === "DELIVERED") {
+      query = query.order("actual_arrival", { ascending: false, nullsFirst: false})
+    } else {
+      query = query.order("created_at", { ascending: false })
+    }
+
+    const { data, error, count } = await query.range(from, to)
 
     if (error) {
-      return res.status(500).json({ message: error.message });
+      return res.status(500).json({ message: error.message })
     }
 
-    return res.status(200).json(data);
+    return res.status(200).json({
+      data,
+      meta: {
+        page: pageNum,
+        limit: limitNum,
+        total: count,
+        totalPages: Math.ceil(count / limitNum),
+      },
+    })
   } catch (err) {
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message })
   }
-});
+})
 
 
-router.get("/get-by-source", async (req,res) => {
-     const { source, status } = req.query;
 
-     if(!source || !status) {
-       return res.status(400).json({ message: "source and status are required" });
-     }
+router.get("/get-by-source", async (req, res) => {
+  const { source, status, page = 1, limit = 5 } = req.query
 
-    try {
-        const {data, error}  = await supabase
-        .from(table)
-        .select(responseFields)
-        .eq('from_warehouse', source)
-        .eq('status', status)
-        
-        if(error) {return res.status(500).json({message : error.message})}
+  if (!source || !status) {
+    return res.status(400).json({ message: "source and status are required" })
+  }
 
-        return res.status(200).json(data)
-    } catch (err) {
-        return res.status(500).json({message : err.message})
+  const pageNum = Math.max(Number(page), 1)
+  const limitNum = Math.max(Number(limit), 1)
+  const from = (pageNum - 1) * limitNum
+  const to = from + limitNum - 1
+
+  try {
+    const { data, error, count } = await supabase
+      .from(table)
+      .select(responseFields, { count: "exact" })
+      .eq("from_warehouse", source)
+      .eq("status", String(status).toUpperCase())
+      .order("created_at", {ascending:false})
+      .range(from, to)
+
+    if (error) {
+      return res.status(500).json({ message: error.message })
     }
+
+    return res.status(200).json({
+        data,
+        meta: {
+          page: pageNum,
+          limit: limitNum,
+          total: count,
+          totalPages: Math.max(1, Math.ceil(count / limitNum)),
+        },
+    })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
 })
 
 
@@ -204,73 +246,101 @@ router.post("/update-status", async (req, res) => {
   }
 
   try {
-    const { data: updatedTransfer, error: updateError } = await supabase
-      .from("transfer_request")
-      .update({ status: status.toUpperCase() })
-      .eq("id", id)
-      .select(`id, status, from_warehouse, to_branch, to_warehouse`)
-      .maybeSingle();
-
-    if (updateError) throw updateError;
-    if (!updatedTransfer) {
-      return res.status(404).json({ message: "Transfer not found" });
-    }
-
     const transfer = await getTransferById(id);
     if (!transfer) return res.status(404).json({ message: "Transfer not found" });
 
+    const nextStatus = status.toUpperCase();
 
+  if (nextStatus === "APPROVED") {
     for (const item of transfer.transfer_item) {
-      const inventoryItemId = item.inventory_item?.skuid || item.inventory_item_id;
+      const inventoryItemId =
+        item.inventory_item?.skuid || item.inventory_item_id;
       const quantity = Number(item.quantity);
 
-      if (status.toUpperCase() === "OUT") {
-        const { data: sourceInventory, error: sourceError } = await supabase
-          .from("inventory")
-          .select("id, qty")
-          .eq("inventory_item_id", inventoryItemId)
-          .eq("warehouse_id", transfer.from_warehouse.id)
-          .maybeSingle();
+      const { data: sourceInventory, error } = await supabase
+        .from("inventory")
+        .select("id, qty")
+        .eq("inventory_item_id", inventoryItemId)
+        .eq("warehouse_id", transfer.from_warehouse.id)
+        .maybeSingle();
 
-        if (sourceError) throw sourceError;
-        if (!sourceInventory) {
-          throw new Error(`Source inventory not found for item ${inventoryItemId}`);
-        }
+      if (error) throw error;
 
-        const newQty = sourceInventory.qty - quantity;
-        if (newQty < 0) {
-          throw new Error(`Insufficient stock for item ${inventoryItemId}`);
-        }
+      const availableQty = sourceInventory?.qty ?? 0;
 
-        await supabase
-          .from("inventory")
-          .update({ qty: newQty })
-          .eq("id", sourceInventory.id);
-
-        await supabase.from("inventory_transaction").insert({
-          changed_quantity: -quantity,
-          source: "TRANSFER",
-          type: "OUT",
-          inventory_id: sourceInventory.id,
-          transfer_request_id: transfer.id,
-          created_at: new Date()
+      if (availableQty < quantity) {
+        return res.status(400).json({
+          message: `Insufficient stock for inventory item: ${item.inventory_item?.name || "Unknown Item"}`
         });
       }
+    }
 
+    for (const item of transfer.transfer_item) {
+      const inventoryItemId =
+        item.inventory_item?.skuid || item.inventory_item_id;
+      const quantity = Number(item.quantity);
 
-      if (status.toUpperCase() === "DELIVERED") {
-        const destinationFilter = transfer.to_warehouse
-          ? { warehouse_id: transfer.to_warehouse.id }
-          : { branch_id: transfer.to_branch.id };
+      const { data: sourceInventory, error } = await supabase
+        .from("inventory")
+        .select("id, qty")
+        .eq("inventory_item_id", inventoryItemId)
+        .eq("warehouse_id", transfer.from_warehouse.id)
+        .single();
 
-        let { data: destInventory, error: destError } = await supabase
+      if (error) throw error;
+
+      await supabase
+        .from("inventory")
+        .update({ qty: sourceInventory.qty - quantity })
+        .eq("id", sourceInventory.id);
+
+      await supabase.from("inventory_transaction").insert({
+        changed_quantity: -quantity,
+        source: "TRANSFER",
+        type: "OUT",
+        inventory_id: sourceInventory.id,
+        transfer_request_id: transfer.id,
+        created_at: new Date(),
+      });
+    }
+  }
+
+    if (nextStatus === "DELIVERED") {
+      
+      await supabase
+        .from("transfer_request")
+        .update({
+          actual_arrival: new Date(),
+        })
+        .eq("id", transfer.id)
+  
+      for (const item of transfer.transfer_item) {
+        const inventoryItemId =
+          item.inventory_item?.skuid || item.inventory_item_id;
+        const quantity = Number(item.quantity);
+        const isWarehouseDest = !!transfer.to_warehouse?.id;
+
+        let inventoryQuery = supabase
           .from("inventory")
           .select("id, qty")
-          .eq("inventory_item_id", inventoryItemId)
-          .match(destinationFilter)
-          .maybeSingle();
+          .eq("inventory_item_id", inventoryItemId);
 
-        if (destError) throw destError;
+        if (isWarehouseDest) {
+          inventoryQuery = inventoryQuery
+            .eq("warehouse_id", transfer.to_warehouse.id)
+            .is("branch_id", null);
+        } else {
+          inventoryQuery = inventoryQuery
+            .eq("branch_id", transfer.to_branch.id)
+            .is("warehouse_id", null);
+        }
+
+        const { data: destInventory, error } =
+          await inventoryQuery.maybeSingle();
+
+        if (error) throw error;
+
+        let finalInventory = destInventory;
 
         if (!destInventory) {
           const { data: newInventory, error: createError } = await supabase
@@ -278,40 +348,46 @@ router.post("/update-status", async (req, res) => {
             .insert({
               inventory_item_id: inventoryItemId,
               qty: quantity,
-              ...destinationFilter,
+              warehouse_id: isWarehouseDest ? transfer.to_warehouse.id : null,
+              branch_id: isWarehouseDest ? null : transfer.to_branch.id,
             })
             .select("id, qty")
             .single();
 
           if (createError) throw createError;
-          destInventory = newInventory;
+          finalInventory = newInventory;
         } else {
-
-          const newQty = destInventory.qty + quantity;
           const { data: updatedInv, error: updateError } = await supabase
             .from("inventory")
-            .update({ qty: newQty })
+            .update({ qty: destInventory.qty + quantity })
             .eq("id", destInventory.id)
             .select("id, qty")
             .single();
 
           if (updateError) throw updateError;
-          destInventory = updatedInv;
+          finalInventory = updatedInv;
         }
 
         await supabase.from("inventory_transaction").insert({
           changed_quantity: quantity,
           source: "TRANSFER",
           type: "IN",
-          inventory_id: destInventory.id,
+          inventory_id: finalInventory.id,
           transfer_request_id: transfer.id,
-          created_at: new Date()
+          created_at: new Date(),
         });
       }
     }
 
+    const { error: updateError } = await supabase
+      .from("transfer_request")
+      .update({ status: nextStatus })
+      .eq("id", id);
+
+    if (updateError) throw updateError;
+
     return res.status(200).json({
-      message: `Transfer status updated to ${status.toUpperCase()} and processed successfully.`,
+      message: `Transfer status updated to ${nextStatus}`,
       id,
     });
   } catch (err) {
@@ -319,6 +395,5 @@ router.post("/update-status", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
-
 
 export default router

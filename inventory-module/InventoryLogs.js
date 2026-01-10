@@ -33,7 +33,6 @@ router.get("/get-all", async (req, res) => {
       });
     }
 
-    // STEP 1: Get matching inventory IDs
     let inventoryQuery = supabase.from("inventory").select("id");
 
     if (branch_id) inventoryQuery = inventoryQuery.eq("branch_id", branch_id);

@@ -1,6 +1,8 @@
 import express from "express";
 import { supabase } from "../config.js";
 import { recalcProjectStatus } from "./Tasks.js";
+import { logProjectActivity } from "./utils/ProjectActivityLogger.js";
+
 
 const router = express.Router();
 const table = "resource_allocation";
@@ -19,7 +21,6 @@ router.post("/create", async (req, res) => {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
-    // Check resource
     const { data: resource } = await supabase
       .from("resources")
       .select("*")
@@ -36,7 +37,6 @@ router.post("/create", async (req, res) => {
       });
     }
 
-    // Insert allocation
     const { data: allocation, error: insertErr } = await supabase
       .from(table)
       .insert({
@@ -53,19 +53,29 @@ router.post("/create", async (req, res) => {
     if (insertErr)
       return res.status(500).json({ message: insertErr.message });
 
-    // Deduct resource availability
     const newAvailability = resource.availability - quantity;
     await supabase
       .from("resources")
       .update({ availability: newAvailability })
       .eq("id", resource_id);
 
-    // Recalc project
     const { data: task } = await supabase
       .from("tasks")
-      .select("project_id")
+      .select("project_id, name")
       .eq("id", task_id)
       .maybeSingle();
+
+    if (task) {
+      await logProjectActivity({ // log allocation creation
+        project_id: task.project_id, // reference related project
+        actor_id: req.user?.id ?? null, // identify actor
+        actor_role: req.user?.role ?? "PM", // PM role
+        entity_type: "ALLOCATION", // allocation-level action
+        entity_id: allocation.id, // affected allocation
+        action: "RESOURCE_ALLOCATED", // action keyword
+        description: `Allocated ${quantity} ${resource.unit} of ${resource.name} to task "${task.name}"`, // readable log message
+      });
+    }
 
     if (task) await recalcProjectStatus(task.project_id);
 
@@ -108,9 +118,26 @@ router.post("/approve", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    // ------------------------------------------------
-    // CHECK IF ALL ALLOCATIONS APPROVED → TASK IN_PROGRESS
-    // ------------------------------------------------
+    const { data: task } = await supabase
+      .from("tasks")
+      .select("project_id, name")
+      .eq("id", existing.task_id)
+      .maybeSingle();
+
+    if (task) {
+      await logProjectActivity({ // log allocation approval or rejection
+        project_id: task.project_id, // reference related project
+        actor_id: req.user?.id ?? null, // identify actor
+        actor_role: "FINANCE", // finance role
+        entity_type: "ALLOCATION", // allocation-level action
+        entity_id: id, // affected allocation
+        action: is_approved ? "ALLOCATION_APPROVED" : "ALLOCATION_REJECTED", // approval result
+        description: is_approved
+          ? `Resource allocation approved for task "${task.name}"`
+          : `Resource allocation rejected for task "${task.name}"`, // readable log message
+      });
+    }
+
     const { data: allAlloc } = await supabase
       .from("resource_allocation")
       .select("is_approved")
@@ -126,13 +153,6 @@ router.post("/approve", async (req, res) => {
         .update({ status: "IN_PROGRESS" })
         .eq("id", existing.task_id);
     }
-
-    // Recalc project
-    const { data: task } = await supabase
-      .from("tasks")
-      .select("project_id")
-      .eq("id", existing.task_id)
-      .maybeSingle();
 
     if (task) await recalcProjectStatus(task.project_id);
 
@@ -171,9 +191,21 @@ router.delete("/delete-by-id", async (req, res) => {
 
     const { data: task } = await supabase
       .from("tasks")
-      .select("project_id")
+      .select("project_id, name")
       .eq("id", existing.task_id)
       .maybeSingle();
+
+    if (task) {
+      await logProjectActivity({ // log allocation deletion
+        project_id: task.project_id, // reference related project
+        actor_id: req.user?.id ?? null, // identify actor
+        actor_role: req.user?.role ?? "PM", // PM role
+        entity_type: "ALLOCATION", // allocation-level action
+        entity_id: id, // affected allocation
+        action: "ALLOCATION_REMOVED", // action keyword
+        description: `Resource allocation removed from task "${task.name}"`, // readable log message
+      });
+    }
 
     if (task) await recalcProjectStatus(task.project_id);
 
@@ -193,7 +225,6 @@ router.get("/get-all", async (req, res) => {
     return res.status(400).json({ message: "project id required" });
 
   try {
-    // Get task IDs
     const { data: tasks } = await supabase
       .from("tasks")
       .select("id")

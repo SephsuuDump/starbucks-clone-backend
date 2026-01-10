@@ -1,5 +1,7 @@
 import express from "express";
 import { supabase } from "../config.js";
+import { logProjectActivity } from "./utils/ProjectActivityLogger.js";
+
 
 const router = express.Router();
 const table = "resources";
@@ -25,6 +27,16 @@ router.post("/create", async (req, res) => {
       .single();
 
     if (error) return res.status(500).json({ message: error.message });
+
+    await logProjectActivity({ // log resource creation
+      project_id: project_id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: "FINANCE", // finance role
+      entity_type: "RESOURCE", // resource-level action
+      entity_id: data.id, // affected resource
+      action: "RESOURCE_CREATED", // action keyword
+      description: `Resource "${data.name}" was created`, // readable log message
+    });
 
     return res.status(201).json(data);
   } catch (err) {
@@ -64,6 +76,16 @@ router.put("/update", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
+    await logProjectActivity({ // log resource update
+      project_id: existing.project.id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: "FINANCE", // finance role
+      entity_type: "RESOURCE", // resource-level action
+      entity_id: existing.id, // affected resource
+      action: "RESOURCE_UPDATED", // action keyword
+      description: `Resource "${existing.name}" was updated`, // readable log message
+    });
+
     return res.status(200).json({
       message: `Resource ${id} updated successfully`,
       data: data[0],
@@ -97,6 +119,16 @@ router.delete("/delete-by-id", async (req, res) => {
       .select(responseFields);
 
     if (error) return res.status(500).json({ message: error.message });
+
+    await logProjectActivity({ // log resource deletion
+      project_id: existing.project.id, // reference related project
+      actor_id: req.user?.id ?? null, // identify actor
+      actor_role: "FINANCE", // finance role
+      entity_type: "RESOURCE", // resource-level action
+      entity_id: existing.id, // affected resource
+      action: "RESOURCE_DELETED", // action keyword
+      description: `Resource "${existing.name}" was deleted`, // readable log message
+    });
 
     return res.status(200).json({
       message: `Resource ${id} deleted successfully`,
