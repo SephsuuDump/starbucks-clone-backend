@@ -7,16 +7,19 @@ const router = express.Router();
 const table = '_users';
 
 router.get("/google-login", async (req, res) => {
+    console.log("IN");
+    
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: "http://localhost:3000/auth/callback" },
+        options: { redirectTo: `${process.env.NEXT_PUBLIC_API_URL}/auth/callback` },
     });
 
     if (error) return res.status(400).json({ error: error.message });
     res.redirect(data.url);
 });
 
-router.post("/oauth-login", async (req, res) => {    
+router.post("/oauth-login", async (req, res) => {   
+    console.log('IN') 
     const { email, provider, external_id } = req.body
 
     if (!email) return res.status(400).json({ error: "Email required" })
@@ -32,7 +35,8 @@ router.post("/oauth-login", async (req, res) => {
             const token = jwt.sign(
                 { 
                     id: existing.id, 
-                    email: existing.email 
+                    email: existing.email,
+                    role: "CUSTOMER" 
                 },
                 process.env.JWT_SECRET,
                 { expiresIn: process.env.JWT_EXPIRES_IN }
@@ -52,11 +56,40 @@ router.post("/oauth-login", async (req, res) => {
             external_id,   
         })
         .select()
-        .single()
+        .single()        
 
         if (error) throw error
 
-        res.json({ message: "User created", user: newUser })
+        const { data: creditData, error: creditError } = await supabase
+        .from("account_credit")
+        .insert({
+            user_id: newUser.id,   
+        });
+
+        if (creditError) return res.status(500).json({
+            error: "User created but customer entry failed: " + customerError.message ?? creditError.message,
+        });        
+
+        const customerData = await fetch(
+            `${process.env.NEST_PUBLIC_API_URL}/customers/create`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: newUser.id })
+            }
+        )        
+
+        const token = jwt.sign(
+            { 
+                id: newUser.id, 
+                email: newUser.email,
+                role: "CUSTOMER" 
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN }
+        );            
+
+        return res.status(200).json(token);
     } catch (err) {
         res.status(500).json({ error: err.message })
     }
@@ -66,9 +99,11 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
     const { data, error } = await supabase
     .from(table)
-    .select('*')
+    .select('*, employee(*)')
     .eq('email', email)
     .single();
+    console.log(data);
+    
 
     if (!data) return res.status(400).json({ message: "Invalid username" });
     if (error) return res.status(500).json({ message: error.message });
@@ -79,11 +114,32 @@ router.post("/login", async (req, res) => {
         return res.status(401).json({ message: "Invalid password" });
     }
 
-    const token = jwt.sign(
+    let token;
+
+    console.log(data);
+    
+
+    if (data.role === 'WAREHOUSE EMPLOYEE') {
+        token = jwt.sign(
         { 
             id: data.id, 
             email: data.email,
-            role: data.role
+            role: data.role,
+            warehouseId: data.employee.warehouse_id,
+            branchId: data.employee.branch_id
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+        );
+        return res.status(200).json(token);
+    }
+
+    token = jwt.sign(
+        { 
+            id: data.id, 
+            email: data.email,
+            role: data.role,
+            branchId: "0b0f48e1-6866-4776-9ce9-31309f5f4dbe",
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
@@ -93,28 +149,66 @@ router.post("/login", async (req, res) => {
 })
 
 router.post("/signup", async (req, res) => {
-    const { email, password } = req.body;
-    
-    const { data: existing, error: findError } = await supabase
-    .from(table)
-    .select('*')
-    .eq('email', email)
-    .maybeSingle();
+    try {
+        const { email, password, role } = req.body;
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+        const { data: existing, error: findError } = await supabase
+            .from(table)
+            .select("*")
+            .eq("email", email)
+            .maybeSingle();
 
-    if (findError) return res.status(500).json({ error: findError.message });
-    if (existing) return res.status(400).json({ message: "Email is already used." });
+        if (findError) return res.status(500).json({ error: findError.message });
+        if (existing) return res.status(400).json({ message: "Email is already used." });
 
-    const { data, error } = await supabase
-    .from(table)
-    .insert({ email, password: hashedPassword })
-    .select('*')
-    .single();    
+        const hashedPassword = await bcrypt.hash(password, 12);
 
-    if (error) return res.status(500).json({ error: error.message });
+        const { data: user, error: userError } = await supabase
+            .from(table)
+            .insert({ email, password: hashedPassword, role })
+            .select("*")
+            .single();
 
-    return res.status(201).json(data);
+        if (userError) return res.status(500).json({ error: userError.message });
+
+        if (role === "SUPPLIER") {
+            const { error: supplierError } = await supabase
+                .from("supplier")
+                .insert({
+                    user_id: user.id,  
+                });
+
+            if (supplierError) {
+                return res.status(500).json({
+                    error: "User created but supplier entry failed: " + supplierError.message,
+                });
+            }
+        } else if (role === "CUSTOMER") {
+            const { error: customerError } = await supabase
+                .from("customers")
+                .insert({
+                    user_id: user.id,   
+                });
+
+            const { error: creditError } = await supabase
+                .from("account_credit")
+                .insert({
+                    user_id: user.id,   
+                });
+
+            if (customerError || creditError) {
+                return res.status(500).json({
+                    error: "User created but customer entry failed: " + customerError.message ?? creditError.message,
+                });
+            }
+        } 
+
+        return res.status(201).json(user);
+
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
 });
+
 
 export default router;

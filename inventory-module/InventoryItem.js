@@ -134,7 +134,7 @@ router.get("/find-by-category", async (req, res) => {
 router.get("/get-all", async (req, res) => {
   try {
     const page = parseInt(req.query.page ) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 1000;
     const search = (req.query.search ) || "";
     const sort = (req.query.sort ) || "az";
     const offset = (page - 1) * limit;
