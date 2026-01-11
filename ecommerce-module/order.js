@@ -278,8 +278,8 @@ router.post('/generate-invoice', async (req, res) => {
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=invoice-${orderData.id}.pdf`
+            'Content-Disposition',
+            `attachment; filename=invoice-${orderData.id}.pdf`
         );
 
         doc.pipe(res);
