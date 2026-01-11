@@ -26,6 +26,10 @@ router.get('/get-summary', async (req, res) => {
     .from(tertiaryTable)
     .select('*', { count: 'exact', head: true })
 
+    const { count: totalCases, error: totalCasesError } = await supabase
+    .from('support_cases')
+    .select('*', { count: 'exact', head: true })
+
     const { count: totalDiscounts, error: totalDiscountsError } = await supabase
     .from(discountsTable)
     .select('*', { count: 'exact', head: true })
@@ -66,6 +70,7 @@ router.get('/get-summary', async (req, res) => {
     if (totalProductsError) return res.status(500).json({ message: totalProductsError.message });
     if (totalDiscountsError) return res.status(500).json({ message: totalDiscountsError.message });
     if (totalQuotationsError) return res.status(500).json({ message: totalQuotationsError.message });
+    if (totalCasesError) return res.status(500).json({ message: totalCasesError.message });
     if (salesOverviewError) return res.status(500).json({ message: salesOverviewError.message });
     if (newCustomerRes.error || activeRes.error || inactiveRes.error) {
         return res.status(500).json({
@@ -82,6 +87,7 @@ router.get('/get-summary', async (req, res) => {
         totalProducts,
         totalDiscounts,
         totalQuotations,
+        totalCases,
         customerInsights: [
             { type: "New Customer", count: newCustomerRes.count },
             { type: "Active Customer", count: activeRes.count },

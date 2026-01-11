@@ -134,6 +134,20 @@ router.post("/login", async (req, res) => {
         return res.status(200).json(token);
     }
 
+    if (data.role == 'BRANCH EMPLOYEE') {
+         token = jwt.sign(
+        { 
+            id: data.id, 
+            email: data.email,
+            role: data.role,
+            branchId:data.employee.branch.id
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+        );
+        return res.status(200).json(token);
+    }
+
     token = jwt.sign(
         { 
             id: data.id, 

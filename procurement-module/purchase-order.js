@@ -294,9 +294,38 @@ router.patch('/update-status', async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
+    console.log('po', data);
+
     const { data: insert, error: insertError } = await supabase
     .from('purchase_order_timeline')
     .insert({ po_id: data.id, status: data.status });
+
+    if (status === "CONFIRMED") {
+        const { data: supplier, error: fetchError } = await supabase
+            .from('supplier')
+            .select('total_sales')
+            .eq('id', data.supplier_id)
+            .single();
+
+        if (fetchError) {
+            return res.status(500).json({ message: fetchError.message });
+        }
+
+        console.log('supplier', supplier);
+        
+
+        const { error: updateError } = await supabase
+            .from('supplier')
+            .update({
+                total_sales: supplier.total_sales + data.total_cost
+            })
+            .eq('id', data.supplier_id);        
+
+        if (updateError) {
+            return res.status(500).json({ message: updateError.message });
+        }
+    }
+
     
     if (insertError) return res.status(500).json({ message: insertError.message });
 
