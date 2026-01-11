@@ -116,7 +116,7 @@ router.post("/login", async (req, res) => {
 
     let token;
 
-    console.log(data);
+    console.log('hiraya', data);
     
 
     if (data.role === 'WAREHOUSE EMPLOYEE') {
@@ -140,7 +140,7 @@ router.post("/login", async (req, res) => {
             id: data.id, 
             email: data.email,
             role: data.role,
-            branchId:data.employee.branch.id
+            branchId: data.employee.branch_id
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }

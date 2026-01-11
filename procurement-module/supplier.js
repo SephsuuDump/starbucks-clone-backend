@@ -37,6 +37,43 @@ router.get('/:id', async (req, res) => {
     return res.status(200).json(data);
 })
 
+router.post('/rate-supplier', async (req, res) => {
+    const rating = req.body;
+
+    const { data: existing, error: errorExisting } = await supabase
+    .from('supplier_rating')
+    .select('*')
+    .eq('supplier_id', rating.supplier_id)
+    .eq('user_id', rating.user_id)
+    .maybeSingle()
+
+    if (errorExisting) return res.status(500).json({ message: errorExisting.message })
+
+    if (!existing) {
+        const { data: insertRating, error: errorInsertRating } = await supabase
+        .from('supplier_rating')
+        .insert(rating)
+        .select('*')
+        .single()
+
+        if (errorInsertRating) return res.status(500).json({ message: errorInsertRating.message })
+
+        return res.json(insertRating)
+    }
+
+    const { data: updateRating, error: errorUpdateRating } = await supabase
+    .from('supplier_rating')
+    .update({ rating: rating.rating })
+    .eq('supplier_id', rating.supplier_id)
+    .eq('user_id', rating.user_id)
+    .select('*')
+    .single()
+
+    if (errorUpdateRating) return res.status(500).json({ message: errorUpdateRating.message })
+
+    return res.json(updateRating)
+})
+
 router.put("/update", async (req, res) => {
     const { id } = req.query;
     const {
@@ -49,7 +86,6 @@ router.put("/update", async (req, res) => {
     } = req.body;
 
     try {
-        // Check if supplier exists
         const { data: existing, error: findError } = await supabase
             .from(table)
             .select("*")
@@ -64,7 +100,6 @@ router.put("/update", async (req, res) => {
             return res.status(404).json({ message: `Supplier with id ${id} not found.` });
         }
 
-        // Update supplier fields
         const { data, error } = await supabase
             .from(table)
             .update({
@@ -94,20 +129,17 @@ router.put("/update", async (req, res) => {
 });
 
 router.put("/active", async (req, res) => {
-    const { id } = req.query;
-    const { is_active } = req.body;
-
-    if (typeof is_active !== "boolean") {
-        return res.status(400).json({ message: "`is_active` must be a boolean value." });
-    }
+    const { id, is_active } = req.body;
 
     try {
-        // Verify supplier exists
         const { data: existing, error: findError } = await supabase
             .from(table)
             .select("*")
             .eq("id", id)
-            .maybeSingle();
+            .single();
+
+        // console.log(findError.message ?? "N/A");
+        
 
         if (findError) {
             return res.status(500).json({ message: findError.message });
@@ -117,11 +149,10 @@ router.put("/active", async (req, res) => {
             return res.status(404).json({ message: `Supplier with id ${id} not found.` });
         }
 
-        // Update only the is_active field
         const { data, error } = await supabase
             .from(table)
-            .update({ is_active })
-            .eq("id", id)
+            .update({ is_active: is_active })
+            .eq("id", existing.id)
             .select("*")
             .single();
 

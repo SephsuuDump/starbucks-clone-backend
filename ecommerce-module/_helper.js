@@ -102,8 +102,8 @@ export function formatSalesOrder(item) {
             ? {
                 first_name: item._users.first_name,
                 last_name: item._users.last_name,
-                phone: item._users.customers[0].phone,
-                address: item._users.customers[0].address,
+                phone: item._users.customers[0].phone ?? "N/A",
+                address: item._users.customers[0].address ?? "N/A",
                 city: item._users.customers[0].city,
                 province: item._users.customers[0].province,
                 country: item._users.customers[0].country,
@@ -123,39 +123,54 @@ export function formatSalesOrder(item) {
 }
 
 export function formatSalesOrders(items) {
-    return items.map((item) => ({
-        id: item.id,
-        status: item.status,
-        total_amount: item.total_amount,
-        payment_mode: item.payment_mode,
-        created_at: item.created_at,
-        order_items: item.order_items.map((subItem) => ({
-            ...formatBranchProduct(subItem.branch_products),
-            quantity: subItem.quantity,
-            unit_price: subItem.unit_price,
-            total_price: subItem.total_price,
-        })),
-        customer: item._users ? {
-            first_name: item._users.first_name,
-            last_name: item._users.last_name,
-            phone: item._users.customers[0].phone,
-            address: item._users.customers[0].address,
-            city: item._users.customers[0].city,
-            province: item._users.customers[0].province,
-            country: item._users.customers[0].country,
-        } : null,
-        branch: item.branch ? {
-            id: item.branch.id,
-            name: item.branch.name
-        } : null,
-        discounts: item.order_discounts ? item.order_discounts.map((subItem) => ({
-            id: subItem.discounts.id,
-            name: subItem.discounts.name,
-            type: subItem.discounts.type,
-            value: subItem.discounts.value,
-        })) : null,
-    }))
+    return items.map((item) => {
+        const customer = item?._users?.customers?.[0];
+
+        return {
+            id: item.id,
+            status: item.status,
+            total_amount: item.total_amount,
+            payment_mode: item.payment_mode,
+            created_at: item.created_at,
+
+            order_items: (item.order_items ?? []).map((subItem) => ({
+                ...formatBranchProduct(subItem.branch_products),
+                quantity: subItem.quantity,
+                unit_price: subItem.unit_price,
+                total_price: subItem.total_price,
+            })),
+
+            customer: item._users
+                ? {
+                      first_name: item._users.first_name ?? "N/A",
+                      last_name: item._users.last_name ?? "N/A",
+                      phone: customer?.phone ?? "N/A",
+                      address: customer?.address ?? "N/A",
+                      city: customer?.city ?? "N/A",
+                      province: customer?.province ?? "N/A",
+                      country: customer?.country ?? "N/A",
+                  }
+                : null,
+
+            branch: item.branch
+                ? {
+                      id: item.branch.id,
+                      name: item.branch.name,
+                  }
+                : null,
+
+            discounts: item.order_discounts
+                ? item.order_discounts.map((subItem) => ({
+                      id: subItem.discounts.id,
+                      name: subItem.discounts.name,
+                      type: subItem.discounts.type,
+                      value: subItem.discounts.value,
+                  }))
+                : [],
+        };
+    });
 }
+
 
 export function formatBranchProductLog(item) {
   const product = item?.branch_products?.products;

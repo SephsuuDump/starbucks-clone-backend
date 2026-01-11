@@ -81,7 +81,8 @@ router.get('/get-by-id', async (req, res) => {
             name: subitem.supplier_item.name,
             quantity: subitem.quantity,
             description: subitem.supplier_item.description,
-            unit_cost: subitem.supplier_item.unit_cost
+            unit_cost: subitem.supplier_item.unit_cost,
+            category: subitem.supplier_item.category
         })),
         sent_date: data.purchase_order_timeline.find(t => t.status === "SENT")?.date || null,
         confirmed_date: data.purchase_order_timeline.find(t => t.status === "CONFIRMED")?.date || null,

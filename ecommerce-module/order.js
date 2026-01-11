@@ -140,7 +140,7 @@ router.post('/create', async (req, res) => {
     .from(secondaryTable)
     .select('total_spent, total_orders')
     .eq('user_id', id)
-    .single();
+    .maybeSingle();
 
     console.log('Stats error', statsError);
 
@@ -155,7 +155,6 @@ router.post('/create', async (req, res) => {
         total_orders: stats.total_orders + 1
     })
     .eq('user_id', id)
-    .single();
 
     console.log('Update error', updateError);
 

@@ -12,7 +12,8 @@ router.get('/get-by-supplier', async (req, res) => {
         *,
         supplier(
             *,
-            supplier_item(*)
+            supplier_item(*),
+            supplier_rating(*)
         )
     `)
     .eq('id', id)
