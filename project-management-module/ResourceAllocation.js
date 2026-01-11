@@ -10,15 +10,46 @@ const table = "resource_allocation";
 const responseFields =
   "id, task_id, resource_id, quantity, allocated_cost, created_at, is_approved";
 
-// ----------------------------------------------------
-// CREATE ALLOCATION
-// ----------------------------------------------------
 router.post("/create", async (req, res) => {
   const { task_id, resource_id, quantity, allocated_cost } = req.body;
 
   try {
-    if (!task_id || !resource_id || !quantity) {
+    if (!task_id || !resource_id || !quantity || !allocated_cost) {
       return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    const { data: task } = await supabase
+      .from("tasks")
+      .select("project_id, name")
+      .eq("id", task_id)
+      .maybeSingle();
+
+    if (!task) return res.status(404).json({ message: "Task not found." });
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("budget")
+      .eq("id", task.project_id)
+      .maybeSingle();
+
+    if (!project)
+      return res.status(404).json({ message: "Project not found." });
+
+    const { data: allocations } = await supabase
+      .from("resource_allocation")
+      .select("allocated_cost, tasks!inner(project_id)")
+      .eq("tasks.project_id", task.project_id)
+      .eq("is_deleted", false);
+
+    const allocatedTotal = allocations.reduce(
+      (sum, a) => sum + (a.allocated_cost || 0),
+      0
+    );
+
+    if (allocatedTotal + allocated_cost > project.budget) {
+      return res.status(400).json({
+        message: "Allocation exceeds remaining project budget",
+      });
     }
 
     const { data: resource } = await supabase
@@ -33,11 +64,11 @@ router.post("/create", async (req, res) => {
 
     if (resource.availability < quantity) {
       return res.status(400).json({
-        message: `Only ${resource.availability} ${resource.unit} available.`
+        message: `Only ${resource.availability} ${resource.unit} available.`,
       });
     }
 
-    const { data: allocation, error: insertErr } = await supabase
+    const { data: allocation, error } = await supabase
       .from(table)
       .insert({
         task_id,
@@ -45,52 +76,39 @@ router.post("/create", async (req, res) => {
         quantity,
         allocated_cost,
         is_approved: false,
-        is_deleted: false
+        is_deleted: false,
       })
       .select(responseFields)
       .single();
 
-    if (insertErr)
-      return res.status(500).json({ message: insertErr.message });
+    if (error) return res.status(500).json({ message: error.message });
 
-    const newAvailability = resource.availability - quantity;
     await supabase
       .from("resources")
-      .update({ availability: newAvailability })
+      .update({ availability: resource.availability - quantity })
       .eq("id", resource_id);
 
-    const { data: task } = await supabase
-      .from("tasks")
-      .select("project_id, name")
-      .eq("id", task_id)
-      .maybeSingle();
+    await logProjectActivity({
+      project_id: task.project_id,
+      actor_id: req.user?.id ?? null,
+      actor_role: req.user?.role ?? "PM",
+      entity_type: "ALLOCATION",
+      entity_id: allocation.id,
+      action: "RESOURCE_ALLOCATED",
+      description: `Allocated ${quantity} ${resource.unit} of ${resource.name} to task "${task.name}"`,
+    });
 
-    if (task) {
-      await logProjectActivity({ // log allocation creation
-        project_id: task.project_id, // reference related project
-        actor_id: req.user?.id ?? null, // identify actor
-        actor_role: req.user?.role ?? "PM", // PM role
-        entity_type: "ALLOCATION", // allocation-level action
-        entity_id: allocation.id, // affected allocation
-        action: "RESOURCE_ALLOCATED", // action keyword
-        description: `Allocated ${quantity} ${resource.unit} of ${resource.name} to task "${task.name}"`, // readable log message
-      });
-    }
-
-    if (task) await recalcProjectStatus(task.project_id);
+    await recalcProjectStatus(task.project_id);
 
     return res.status(201).json({
       message: "Allocation created",
-      data: allocation
+      data: allocation,
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
 });
 
-// ----------------------------------------------------
-// APPROVE ALLOCATION
-// ----------------------------------------------------
 router.post("/approve", async (req, res) => {
   const { id } = req.query;
   const { is_approved } = req.body;
@@ -125,16 +143,16 @@ router.post("/approve", async (req, res) => {
       .maybeSingle();
 
     if (task) {
-      await logProjectActivity({ // log allocation approval or rejection
-        project_id: task.project_id, // reference related project
-        actor_id: req.user?.id ?? null, // identify actor
-        actor_role: "FINANCE", // finance role
-        entity_type: "ALLOCATION", // allocation-level action
-        entity_id: id, // affected allocation
-        action: is_approved ? "ALLOCATION_APPROVED" : "ALLOCATION_REJECTED", // approval result
+      await logProjectActivity({ 
+        project_id: task.project_id,
+        actor_id: req.user?.id ?? null, 
+        actor_role: "FINANCE", 
+        entity_type: "ALLOCATION", 
+        entity_id: id, 
+        action: is_approved ? "ALLOCATION_APPROVED" : "ALLOCATION_REJECTED", 
         description: is_approved
           ? `Resource allocation approved for task "${task.name}"`
-          : `Resource allocation rejected for task "${task.name}"`, // readable log message
+          : `Resource allocation rejected for task "${task.name}"`, 
       });
     }
 
@@ -165,9 +183,7 @@ router.post("/approve", async (req, res) => {
   }
 });
 
-// ----------------------------------------------------
-// DELETE ALLOCATION
-// ----------------------------------------------------
+
 router.delete("/delete-by-id", async (req, res) => {
   const { id } = req.query;
 
@@ -196,14 +212,14 @@ router.delete("/delete-by-id", async (req, res) => {
       .maybeSingle();
 
     if (task) {
-      await logProjectActivity({ // log allocation deletion
-        project_id: task.project_id, // reference related project
-        actor_id: req.user?.id ?? null, // identify actor
-        actor_role: req.user?.role ?? "PM", // PM role
-        entity_type: "ALLOCATION", // allocation-level action
-        entity_id: id, // affected allocation
-        action: "ALLOCATION_REMOVED", // action keyword
-        description: `Resource allocation removed from task "${task.name}"`, // readable log message
+      await logProjectActivity({ 
+        project_id: task.project_id,
+        actor_id: req.user?.id ?? null, 
+        actor_role: req.user?.role ?? "PM", 
+        entity_type: "ALLOCATION",
+        entity_id: id, 
+        action: "ALLOCATION_REMOVED", 
+        description: `Resource allocation removed from task "${task.name}"`,
       });
     }
 
@@ -215,9 +231,6 @@ router.delete("/delete-by-id", async (req, res) => {
   }
 });
 
-// ----------------------------------------------------
-// GET ALL FOR PROJECT
-// ----------------------------------------------------
 router.get("/get-all", async (req, res) => {
   const { id, is_approved } = req.query;
 
