@@ -126,7 +126,7 @@ router.post("/login", async (req, res) => {
             email: data.email,
             role: data.role,
             warehouseId: data.employee.warehouse_id,
-            branchId: data.employee.branch_id
+            branchId: null
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
