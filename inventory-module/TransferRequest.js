@@ -266,6 +266,11 @@ router.post("/update-status", async (req, res) => {
 
       if (error) throw error;
 
+      if (!sourceInventory) {
+        return res.status(400).json({
+          message: `No inventory for inventory item: ${item.inventory_item?.name || "Unknown Item"}`
+        });
+      }
       const availableQty = sourceInventory?.qty ?? 0;
 
       if (availableQty < quantity) {

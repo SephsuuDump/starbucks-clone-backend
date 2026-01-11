@@ -27,112 +27,138 @@ router.post('/', async (req, res) => {
 })
 
 router.post('/receive-order', async (req, res) => {
-    const { warehouse_id } = req.query;
-    const po_items = req.body;
+  const { warehouse_id } = req.query;
+  const po_items = req.body;
 
-    for (var item of po_items) {
-        const trimmedName = item.name.trim();
+  for (var item of po_items) {
+    const trimmedName = item.name.trim();
 
-        const { data: existing, error: errorExisting } = await supabase
-        .from('inventory_item')
+    const { data: existing, error: errorExisting } = await supabase
+      .from('inventory_item')
+      .select('*')
+      .eq('name', item.name)
+      .maybeSingle();
+
+    if (existing) {
+
+      const { data: exInvItem, error: errExInvItem } = await supabase
+        .from('inventory')
         .select('*')
-        .eq('name', item.name)
+        .eq('inventory_item_id', existing.id)
+        .eq('warehouse_id', warehouse_id)
         .maybeSingle();
 
-        console.log('1st', existing);
-        
+      if (errExInvItem)
+        return res.status(500).json({ message: errExInvItem.message });
 
-        if (existing) {
+      if (exInvItem) {
 
-            const { data: exInvItem, error: errExInvItem } = await supabase
-            .from('inventory')
-            .select('*')
-            .eq('inventory_item_id', existing.id)
-            .eq('warehouse_id', warehouse_id)
-            .maybeSingle()
+        const { data: updateInv, error: errUpdateInv } = await supabase
+          .from('inventory')
+          .update({ qty: exInvItem.qty + item.quantity })
+          .eq('id', exInvItem.id)
+          .select('id, qty')
+          .single();
 
-            if (errExInvItem) return res.status(500).json({ message: errExInvItem.message })
+        if (errUpdateInv)
+          return res.status(500).json({ message: errUpdateInv.message });
 
-            if (exInvItem) {
+        await supabase.from('inventory_transaction').insert({
+          changed_quantity: item.quantity,
+          source: 'PURCHASE_ORDER',
+          type: 'IN',
+          inventory_id: updateInv.id,
+          created_at: new Date()
+        });
 
-                const { data: updateInv, error: errUpdateInv } = await supabase
-                .from('inventory')
-                .update({ qty: exInvItem.qty + item.quantity })
-                .eq('id', exInvItem.id)
+      } else {
 
-                if (errUpdateInv) return res.status(500).json({ message: errUpdateInv.message })
+        const { data: insertInv, error: errInsertInv } = await supabase
+          .from('inventory')
+          .insert({
+            inventory_item_id: existing.skuid,
+            warehouse_id,
+            branch_id: null,
+            qty: item.quantity
+          })
+          .select('id, qty')
+          .single();
 
-            } else {
+        if (errInsertInv)
+          return res.status(500).json({ message: errInsertInv.message });
 
-                const { data: insertInv, error: errInsertInv } = await supabase
-                .from('inventory')
-                .insert({ 
-                    inventory_item_id: existing.skuid,
-                    warehouse_id,
-                    branch_id: null,
-                    qty: item.quantity
-                })
+        // 🔹 INVENTORY TRANSACTION (NEW INVENTORY)
+        await supabase.from('inventory_transaction').insert({
+          changed_quantity: item.quantity,
+          source: 'PURCHASE_ORDER',
+          type: 'IN',
+          inventory_id: insertInv.id,
+          created_at: new Date()
+        });
+      }
 
-                if (errInsertInv) return res.status(500).json({ message: errInsertInv.message })
-            }
+    } else {
 
-        } else {
+      const toNumUnit = (s) => {
+        if (!s) return null;
+        const m = s.trim().match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
+        return m ? [Number(m[1]), m[2].toLowerCase()] : null;
+      };
 
-            const toNumUnit = (s) => {
-                if (!s) return null;
+      const measurement = toNumUnit(item.description);
 
-                const m = s.trim().match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
-                return m ? [Number(m[1]), m[2].toLowerCase()] : null;
-            };
+      if (!measurement) {
+        return res.status(400).json({
+          message: `Invalid measurement format: ${item.description}`
+        });
+      }
 
-            const measurement = toNumUnit(item.description);
+      const payload = {
+        name: item.name.trim(),
+        category: item.category.toLowerCase(),
+        unit_measurement: measurement[1],
+        required_stock: measurement[0],
+        cost: item.unit_cost
+      };
 
-            if (!measurement) {
-                return res.status(400).json({
-                    message: `Invalid measurement format: ${item.description}`
-                });
-            }
+      const { data: insertInvItem, error: errInsertInvItem } = await supabase
+        .from('inventory_item')
+        .insert(payload)
+        .select('*')
+        .single();
 
-            const payload = {
-                name: item.name.trim(),
-                category: item.category.toLowerCase(),
-                unit_measurement: measurement[1],
-                required_stock: measurement[0],
-                cost: item.unit_cost
-            };
+      if (errInsertInvItem || !insertInvItem) {
+        return res.status(500).json({
+          message: errInsertInvItem?.message ?? 'Failed to create inventory item'
+        });
+      }
 
-            console.log('inventory item payload', payload);
+      const { data: insertInv, error: errInsertInv } = await supabase
+        .from('inventory')
+        .insert({
+          inventory_item_id: insertInvItem.skuid,
+          warehouse_id,
+          branch_id: null,
+          qty: item.quantity
+        })
+        .select('id, qty')
+        .single();
 
-            // 1️⃣ Insert inventory_item
-            const { data: insertInvItem, error: errInsertInvItem } = await supabase
-                .from('inventory_item')
-                .insert(payload)
-                .select('*')
-                .single();
+      if (errInsertInv)
+        return res.status(500).json({ message: errInsertInv.message });
 
-            if (errInsertInvItem || !insertInvItem) {
-                return res.status(500).json({
-                    message: errInsertInvItem?.message ?? "Failed to create inventory item"
-                });
-            }
-
-            // 2️⃣ Insert inventory
-            const { error: errInsertInv } = await supabase
-                .from('inventory')
-                .insert({
-                    inventory_item_id: insertInvItem.skuid,
-                    warehouse_id,
-                    branch_id: null,
-                    qty: item.quantity
-                });
-
-            if (errInsertInv) {
-                return res.status(500).json({ message: errInsertInv.message });
-            }
-
-
-        }
+      // 🔹 INVENTORY TRANSACTION (NEW ITEM + INVENTORY)
+      await supabase.from('inventory_transaction').insert({
+        changed_quantity: item.quantity,
+        source: 'PURCHASE_ORDER',
+        type: 'IN',
+        inventory_id: insertInv.id,
+        created_at: new Date()
+      });
     }
-})
+  }
+
+  return res.status(200).json({ message: 'Purchase order received successfully' });
+});
 
 export default router;

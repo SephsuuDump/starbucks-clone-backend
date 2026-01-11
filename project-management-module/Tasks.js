@@ -397,24 +397,43 @@ router.get("/get-by-id", async (req, res) => {
 
 
 router.get("/get-by-employee", async (req, res) => {
-  const { employee_id } = req.query;
+  const { user_id } = req.query;
 
-  if (!employee_id)
-    return res.status(400).json({ message: "employee_id is required" });
+  if (!user_id) {
+    return res.status(400).json({ message: "user_id is required" });
+  }
 
   try {
+    const { data: employee, error: empError } = await supabase
+      .from("employee")
+      .select("id")
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    if (empError) {
+      return res.status(500).json({ message: empError.message });
+    }
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found for this user" });
+    }
+
     const { data, error } = await supabase
       .from("tasks")
       .select(responseFields2)
-      .eq("employee_id", employee_id)
+      .eq("employee_id", employee.id)
       .eq("is_deleted", false);
 
-    if (error) return res.status(500).json({ message: error.message });
+    if (error) {
+      return res.status(500).json({ message: error.message });
+    }
 
     return res.status(200).json(data);
+
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
 });
+
 
 export default router;
