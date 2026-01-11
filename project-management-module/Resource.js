@@ -12,6 +12,34 @@ router.post("/create", async (req, res) => {
   const { type, name, cost_per_unit, unit, availability, project_id } = req.body;
 
   try {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("budget")
+      .eq("id", project_id)
+      .maybeSingle();
+
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    const { data: existingResources, error: resErr } = await supabase
+      .from("resources")
+      .select("cost_per_unit, availability")
+      .eq("project_id", project_id)
+      .eq("is_deleted", false);
+
+    if (resErr) return res.status(500).json({ message: resErr.message });
+
+    const currentTotalResourceCost = (existingResources || []).reduce((sum, r) => {
+      return sum + (Number(r.cost_per_unit || 0) * Number(r.availability || 0));
+    }, 0);
+
+    const newResourceCost = Number(cost_per_unit || 0) * Number(availability || 0);
+
+    if (currentTotalResourceCost + newResourceCost > Number(project.budget || 0)) {
+      return res.status(400).json({
+        message: "Total resource cost for this project exceeds the project budget",
+      });
+    }
+
     const { data, error } = await supabase
       .from(table)
       .insert({
@@ -28,14 +56,14 @@ router.post("/create", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    await logProjectActivity({ // log resource creation
-      project_id: project_id, // reference related project
-      actor_id: req.user?.id ?? null, // identify actor
-      actor_role: "FINANCE", // finance role
-      entity_type: "RESOURCE", // resource-level action
-      entity_id: data.id, // affected resource
-      action: "RESOURCE_CREATED", // action keyword
-      description: `Resource "${data.name}" was created`, // readable log message
+    await logProjectActivity({
+      project_id,
+      actor_id: req.user?.id ?? null,
+      actor_role: "FINANCE",
+      entity_type: "RESOURCE",
+      entity_id: data.id,
+      action: "RESOURCE_CREATED",
+      description: `Resource "${data.name}" was created`,
     });
 
     return res.status(201).json(data);
@@ -59,8 +87,42 @@ router.put("/update", async (req, res) => {
       .maybeSingle();
 
     if (findErr) return res.status(500).json({ message: findErr.message });
-    if (!existing)
-      return res.status(404).json({ message: "Resource not found" });
+    if (!existing) return res.status(404).json({ message: "Resource not found" });
+
+    const projectId = existing.project?.id;
+
+    const { data: project, error: projErr } = await supabase
+      .from("projects")
+      .select("budget")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (projErr) return res.status(500).json({ message: projErr.message });
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    const { data: allResources, error: allResErr } = await supabase
+      .from("resources")
+      .select("id, cost_per_unit, availability")
+      .eq("project_id", projectId)
+      .eq("is_deleted", false);
+
+    if (allResErr) return res.status(500).json({ message: allResErr.message });
+
+    const oldCost = Number(existing.cost_per_unit || 0) * Number(existing.availability || 0);
+    const updatedCost = Number(cost_per_unit ?? existing.cost_per_unit ?? 0) *
+      Number(availability ?? existing.availability ?? 0);
+
+    const currentTotal = (allResources || []).reduce((sum, r) => {
+      return sum + (Number(r.cost_per_unit || 0) * Number(r.availability || 0));
+    }, 0);
+
+    const projectedTotal = currentTotal - oldCost + updatedCost;
+
+    if (projectedTotal > Number(project.budget || 0)) {
+      return res.status(400).json({
+        message: "Total resource cost for this project exceeds the project budget",
+      });
+    }
 
     const { data, error } = await supabase
       .from(table)
@@ -76,14 +138,14 @@ router.put("/update", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    await logProjectActivity({ // log resource update
-      project_id: existing.project.id, // reference related project
-      actor_id: req.user?.id ?? null, // identify actor
-      actor_role: "FINANCE", // finance role
-      entity_type: "RESOURCE", // resource-level action
-      entity_id: existing.id, // affected resource
-      action: "RESOURCE_UPDATED", // action keyword
-      description: `Resource "${existing.name}" was updated`, // readable log message
+    await logProjectActivity({
+      project_id: existing.project.id,
+      actor_id: req.user?.id ?? null,
+      actor_role: "FINANCE",
+      entity_type: "RESOURCE",
+      entity_id: existing.id,
+      action: "RESOURCE_UPDATED",
+      description: `Resource "${existing.name}" was updated`,
     });
 
     return res.status(200).json({
@@ -94,6 +156,8 @@ router.put("/update", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
+
+
 
 router.delete("/delete-by-id", async (req, res) => {
   const { id } = req.query;
@@ -120,14 +184,14 @@ router.delete("/delete-by-id", async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    await logProjectActivity({ // log resource deletion
-      project_id: existing.project.id, // reference related project
-      actor_id: req.user?.id ?? null, // identify actor
-      actor_role: "FINANCE", // finance role
-      entity_type: "RESOURCE", // resource-level action
-      entity_id: existing.id, // affected resource
-      action: "RESOURCE_DELETED", // action keyword
-      description: `Resource "${existing.name}" was deleted`, // readable log message
+    await logProjectActivity({ 
+      project_id: existing.project.id, 
+      actor_id: req.user?.id ?? null,
+      actor_role: "FINANCE", 
+      entity_type: "RESOURCE", 
+      entity_id: existing.id, 
+      action: "RESOURCE_DELETED", 
+      description: `Resource "${existing.name}" was deleted`,
     });
 
     return res.status(200).json({
